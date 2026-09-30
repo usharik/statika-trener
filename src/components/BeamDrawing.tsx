@@ -154,7 +154,7 @@ function SupportSymbol({ s, X, L, ghost }: { s: Support; X: number; L: number; g
     for (let y = Y - 34; y <= Y + 34; y += 7) lines.push(<line key={y} x1={X} y1={y} x2={X + d * 8} y2={y + 8} />);
     return (
       <g>
-        <g opacity={op}>
+        <g style={{ opacity: op, transition: 'opacity 0.5s' }}>
           <g stroke={C.soft} strokeWidth={1}>{lines}</g>
           <line x1={X} y1={Y - 36} x2={X} y2={Y + 38} stroke={C.ink} strokeWidth={2.2} />
         </g>
@@ -166,7 +166,7 @@ function SupportSymbol({ s, X, L, ghost }: { s: Support; X: number; L: number; g
   const base = top + 4 + triH;
   return (
     <g>
-    <g opacity={op}>
+    <g style={{ opacity: op, transition: 'opacity 0.5s' }}>
       <path d={`M${X},${top + 4} L${X - 13},${base} L${X + 13},${base} Z`} fill="var(--paper)" stroke={C.ink} strokeWidth={1.5} strokeLinejoin="round" />
       <circle cx={X} cy={top + 4} r={4} fill="var(--paper)" stroke={C.ink} strokeWidth={1.5} />
       {s.type === 'pin' ? (
@@ -274,7 +274,7 @@ export function BeamDrawing(props: DrawingProps) {
   const { place, placeAny, boxes } = makePlacer(obstacles);
   const loadsG: ReactNode[] = [];
   const faded = (id: string) => !!resolved?.has(id);
-  for (const l of p.loads) {
+  for (const [li, l] of p.loads.entries()) {
     const isHl = hl(l.id) || items.some((it) => it.loadId === l.id && hl(it.id));
     if (l.kind === 'force') {
       const r = (l.angle * Math.PI) / 180;
@@ -289,10 +289,12 @@ export function BeamDrawing(props: DrawingProps) {
       const anc = ux > 0.3 ? 'end' : ux < -0.3 ? 'start' : 'middle';
       const lx = tail[0] + (ux > 0.3 ? -4 : ux < -0.3 ? 4 : 0);
       loadsG.push(
-        <g key={l.id} opacity={fade ? 0.45 : 1} className={isHl && !fade ? 'hl' : ''}>
+        <g key={l.id} style={{ opacity: fade ? 0.45 : 1, transition: 'opacity 0.5s' }} className={isHl && !fade ? 'hl' : ''}>
+          <g className="a-drop" style={{ animationDelay: `${320 + li * 90}ms` }}>
           <Arrow x1={tail[0]} y1={tail[1]} x2={tip[0]} y2={tip[1]} color={col} width={isHl ? 3 : 2} dash={fade ? '5 4' : undefined} />
           {l.alpha && !fade && <AngleMark tip={tip} ux={ux} uy={uy} alpha={l.alpha} />}
           {!fade && <SvgLabel x={lx} y={place(lx, Math.min(tail[1], tip[1]) - 8, l.label, `${fmt(l.F)} kN`, anc)} anchor={anc} sym={l.label} value={`${fmt(l.F)} kN`} color={col} />}
+          </g>
         </g>,
       );
     } else if (l.kind === 'moment') {
@@ -308,8 +310,12 @@ export function BeamDrawing(props: DrawingProps) {
       );
       loadsG.push(
         <g key={l.id} className={isHl ? 'hl' : ''}>
-          <MomentArc cx={X(l.x)} cy={Y} r={22} ccw={l.ccw} color={C.load} width={isHl ? 3 : 2} />
-          <SvgLabel x={lp.x} y={lp.y} anchor={lp.anchor} sym={l.label} value={v} color={C.load} />
+          <g className="a-spin" style={{ animationDelay: `${320 + li * 90}ms` }}>
+            <MomentArc cx={X(l.x)} cy={Y} r={22} ccw={l.ccw} color={C.load} width={isHl ? 3 : 2} />
+          </g>
+          <g className="a-fade" style={{ animationDelay: `${420 + li * 90}ms` }}>
+            <SvgLabel x={lp.x} y={lp.y} anchor={lp.anchor} sym={l.label} value={v} color={C.load} />
+          </g>
         </g>,
       );
     } else {
@@ -324,11 +330,13 @@ export function BeamDrawing(props: DrawingProps) {
         arrows.push(<Arrow key={i} x1={x} y1={top} x2={x} y2={Y - HB - 1} color={fade ? C.soft : C.load} width={1.3} head={7} />);
       }
       loadsG.push(
-        <g key={l.id} opacity={fade ? 0.35 : 1}>
+        <g key={l.id} style={{ opacity: fade ? 0.35 : 1, transition: 'opacity 0.5s' }}>
+          <g className="a-udl" style={{ animationDelay: `${320 + li * 90}ms` }}>
           <rect x={a} y={top} width={b - a} height={Y - HB - top} fill={fade ? 'none' : 'var(--load-fill)'} />
           <line x1={a} y1={top} x2={b} y2={top} stroke={fade ? C.soft : C.load} strokeWidth={1.6} />
           {arrows}
           {!fade && <SvgLabel x={(a + b) / 2} y={place((a + b) / 2, top - 8, l.label, `${fmt(l.q)} kN/m`, 'middle')} sym={l.label} value={`${fmt(l.q)} kN/m`} color={C.load} />}
+          </g>
         </g>,
       );
     }
@@ -347,7 +355,7 @@ export function BeamDrawing(props: DrawingProps) {
         const tipY = it.dir < 0 ? Y - HB - 1 : Y - HB - len;
         const tailY = it.dir < 0 ? Y - HB - len : Y - HB - 1;
         derived.push(
-          <g key={it.id} className={isHl ? 'hl' : ''}>
+          <g key={it.id} className={(isHl ? 'hl ' : '') + 'a-pop'}>
             <Arrow x1={X(it.x)} y1={tailY} x2={X(it.x)} y2={tipY} color={col} width={w} />
             <PlacedLabel
               pos={placeAny(
@@ -371,7 +379,7 @@ export function BeamDrawing(props: DrawingProps) {
         // vodorovná složka kreslená v ose nosníku, šipka končí v působišti
         const tailX = tipX - it.dir * len;
         derived.push(
-          <g key={it.id} className={isHl ? 'hl' : ''}>
+          <g key={it.id} className={(isHl ? 'hl ' : '') + 'a-pop'} style={{ animationDelay: '120ms' }}>
             <Arrow x1={tailX} y1={Y - 16} x2={tipX} y2={Y - 16} color={col} width={w} />
             <PlacedLabel
               pos={placeAny(
@@ -404,10 +412,12 @@ export function BeamDrawing(props: DrawingProps) {
         className={(clickable ? 'clickable ' : '') + (activeSupport === sp.id ? 'active-support' : '')}
       >
         {activeSupport === sp.id && <circle cx={X(sp.x)} cy={Y + 24} r={34} className="support-halo" />}
-        <SupportSymbol s={sp} X={X(sp.x)} L={p.L} ghost={isReleased} />
+        <g className="a-rise" style={{ animationDelay: `${150 + p.supports.indexOf(sp) * 80}ms` }}>
+          <SupportSymbol s={sp} X={X(sp.x)} L={p.L} ghost={isReleased} />
+        </g>
       </g>,
     );
-    if (isReleased) for (const u of unknownsOfSupport(sp)) reactionsG.push(<g key={u.id}>{Reaction({ u, X: X(u.x), L: p.L, hl: hl('r_' + u.id) || hl(u.id), value: results?.[u.id], placeAny })}</g>);
+    if (isReleased) for (const u of unknownsOfSupport(sp)) reactionsG.push(<g key={u.id + (results ? '-res' : '')}>{Reaction({ u, X: X(u.x), L: p.L, hl: hl('r_' + u.id) || hl(u.id), value: results?.[u.id], placeAny })}</g>);
   }
 
   // ---------- bod momentu, strana, rameno ----------
@@ -420,7 +430,7 @@ export function BeamDrawing(props: DrawingProps) {
   if (arm && Math.abs(arm.to - arm.from) > 1e-6) {
     const ya = Y - 70;
     overlays.push(
-      <g key="arm" className="arm">
+      <g key="arm" className="arm a-fade">
         <line x1={X(arm.from)} y1={Y} x2={X(arm.from)} y2={ya - 6} strokeDasharray="3 3" />
         <line x1={X(arm.to)} y1={Y - 10} x2={X(arm.to)} y2={ya - 6} strokeDasharray="3 3" />
         <Arrow x1={(X(arm.from) + X(arm.to)) / 2} y1={ya} x2={X(arm.to)} y2={ya} color={C.accent} width={1.5} head={8} />
@@ -433,7 +443,7 @@ export function BeamDrawing(props: DrawingProps) {
   }
   if (momentPoint)
     overlays.push(
-      <g key="mp" className="moment-point">
+      <g key={'mp' + momentPoint.label} className="moment-point a-pop">
         <circle cx={X(momentPoint.x)} cy={Y} r={9} />
         <line x1={X(momentPoint.x) - 13} y1={Y} x2={X(momentPoint.x) + 13} y2={Y} />
         <line x1={X(momentPoint.x)} y1={Y - 13} x2={X(momentPoint.x)} y2={Y + 13} />
@@ -442,15 +452,19 @@ export function BeamDrawing(props: DrawingProps) {
 
   // ořez prázdného místa nad a pod výkresem (výkres je na obrazovce stále vidět, šetříme výšku);
   // horní mez počítá i s místem pro kótu ramene, aby výkres při nápovědě neposkakoval
-  const vTop = Math.max(0, Math.min(Y - 100, ...boxes.map((b) => b.t)) - 10);
+  const vTop = Math.min(Y - 100, ...boxes.map((b) => b.t)) - 10;
   const vBottom = Math.min(H, yTot + 14);
   return (
     <svg viewBox={`0 ${vTop} ${W} ${vBottom - vTop}`} className="drawing" role="img">
-      <g>{dim}</g>
-      <text x={W - 8} y={yTot + 4} textAnchor="end" className="dim-note">[m]</text>
+      <g className="a-fade" style={{ animationDelay: '380ms' }}>
+        {dim}
+        <text x={W - 8} y={yTot + 4} textAnchor="end" className="dim-note">[m]</text>
+      </g>
       {supportsG}
-      {beam}
-      {hinges}
+      <g className="a-beam">
+        {beam}
+        {hinges}
+      </g>
       {loadsG}
       {derived}
       {reactionsG}
@@ -480,7 +494,11 @@ function AngleMark({ tip, ux, uy, alpha }: { tip: number[]; ux: number; uy: numb
 type PlaceAny = ReturnType<typeof makePlacer>['placeAny'];
 
 function PlacedLabel({ pos, sym, value, color }: { pos: { x: number; y: number; anchor: 'start' | 'middle' | 'end' }; sym: string; value?: string; color: string }) {
-  return <SvgLabel x={pos.x} y={pos.y} anchor={pos.anchor} sym={sym} value={value} color={color} size={14} />;
+  return (
+    <g className="a-fade" style={{ animationDelay: '260ms' }}>
+      <SvgLabel x={pos.x} y={pos.y} anchor={pos.anchor} sym={sym} value={value} color={color} size={14} />
+    </g>
+  );
 }
 
 /** Volá se jako funkce (ne jako komponenta), aby rozmísťování popisků proběhlo v pořadí kreslení. */
@@ -498,7 +516,9 @@ function Reaction({ u, X, L, hl, value, placeAny }: { u: Unknown; X: number; L: 
     const y2 = up ? Y + HB + 2 : Y + HB + len;
     return (
       <g className={cls}>
-        <Arrow x1={X} y1={y1} x2={X} y2={y2} color={col} width={w} />
+        <g className="a-grow-top">
+          <Arrow x1={X} y1={y1} x2={X} y2={y2} color={col} width={w} />
+        </g>
         <PlacedLabel pos={placeAny([{ x: X + 8, y: Y + HB + len - 2, anchor: 'start' }, { x: X - 8, y: Y + HB + len - 2, anchor: 'end' }, { x: X + 8, y: Y + HB + len - 20, anchor: 'start' }], u.sym, val)} sym={u.sym} value={val} color={col} />
       </g>
     );
@@ -514,7 +534,9 @@ function Reaction({ u, X, L, hl, value, placeAny }: { u: Unknown; X: number; L: 
     const [x1, x2] = right === atLeft ? [far, near] : [near, far];
     return (
       <g className={cls}>
-        <Arrow x1={x1} y1={Y} x2={x2} y2={Y} color={col} width={w} />
+        <g className={atLeft ? 'a-grow-right' : 'a-grow-left'}>
+          <Arrow x1={x1} y1={Y} x2={x2} y2={Y} color={col} width={w} />
+        </g>
         <PlacedLabel pos={placeAny([{ x: far, y: Y - 10, anchor: atLeft ? 'start' : 'end' }, { x: far + o * 4, y: Y + 5, anchor: atLeft ? 'end' : 'start' }, { x: X + o * 10, y: Y + 24, anchor: atLeft ? 'end' : 'start' }, { x: far, y: Y + 24, anchor: atLeft ? 'start' : 'end' }], u.sym, val)} sym={u.sym} value={val} color={col} />
       </g>
     );
@@ -522,7 +544,9 @@ function Reaction({ u, X, L, hl, value, placeAny }: { u: Unknown; X: number; L: 
   const atLeft = u.x < L / 2;
   return (
     <g className={cls}>
-      <MomentArc cx={X} cy={Y} r={26} ccw={!neg} color={col} width={w} />
+      <g className="a-spin">
+        <MomentArc cx={X} cy={Y} r={26} ccw={!neg} color={col} width={w} />
+      </g>
       <PlacedLabel pos={placeAny([{ x: X + (atLeft ? 18 : -18), y: Y - 34, anchor: atLeft ? 'start' : 'end' }, { x: X + (atLeft ? -18 : 18), y: Y - 34, anchor: atLeft ? 'end' : 'start' }, { x: X, y: Y - 44, anchor: 'middle' }], u.sym, val)} sym={u.sym} value={val} color={col} />
     </g>
   );

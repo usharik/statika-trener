@@ -370,3 +370,41 @@ html { scroll-padding-top: calc(var(--sticky-h, 0px) + 8px); }
 .chip-clear { font-size: 0.82rem; font-weight: 500; }
 .theme-btn { font-size: 1.05rem; padding: 6px 11px; }
 body { background: var(--bg); transition: background 0.2s; }
+
+/* ---------- animace ---------- */
+.drawing .a-fade { animation: a-fade 0.5s ease both; }
+.drawing .a-beam { transform-box: fill-box; transform-origin: 0% 50%; animation: a-beam 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.drawing .a-rise { animation: a-rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.drawing .a-drop { animation: a-drop 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.drawing .a-udl { transform-box: fill-box; transform-origin: 50% 100%; animation: a-grow-y 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.drawing .a-grow-top { transform-box: fill-box; transform-origin: 50% 0%; animation: a-grow-y 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.drawing .a-grow-left { transform-box: fill-box; transform-origin: 0% 50%; animation: a-grow-x 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.drawing .a-grow-right { transform-box: fill-box; transform-origin: 100% 50%; animation: a-grow-x 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.drawing .a-spin { transform-box: fill-box; transform-origin: 50% 50%; animation: a-spin 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.drawing .a-pop { transform-box: fill-box; transform-origin: 50% 50%; animation: a-pop 0.4s cubic-bezier(0.3, 1.4, 0.5, 1) both; }
+.support-halo { transform-box: fill-box; transform-origin: 50% 50%; animation: a-halo 1.6s ease-in-out infinite; }
+@keyframes a-fade { from { opacity: 0; } }
+@keyframes a-beam { from { transform: scaleX(0); opacity: 0; } }
+@keyframes a-rise { from { transform: translateY(14px); opacity: 0; } }
+@keyframes a-drop { from { transform: translateY(-20px); opacity: 0; } }
+@keyframes a-grow-y { from { transform: scaleY(0); opacity: 0; } }
+@keyframes a-grow-x { from { transform: scaleX(0); opacity: 0; } }
+@keyframes a-spin { from { transform: rotate(-140deg) scale(0.4); opacity: 0; } }
+@keyframes a-pop { from { transform: scale(0.3); opacity: 0; } }
+@keyframes a-halo { 0%, 100% { transform: scale(0.9); opacity: 0.55; } 50% { transform: scale(1.1); opacity: 1; } }
+
+.panel { animation: panel-in 0.35s ease both; }
+@keyframes panel-in { from { opacity: 0; transform: translateY(8px); } }
+.choice-ok { animation: ui-pop 0.35s cubic-bezier(0.3, 1.5, 0.5, 1); }
+.check { display: inline-block; animation: ui-pop 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); }
+.eq-row-done { transition: background 0.4s; }
+.star.on { display: inline-block; animation: star-pop 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+.star.on:nth-child(2) { animation-delay: 0.15s; }
+.star.on:nth-child(3) { animation-delay: 0.3s; }
+@keyframes ui-pop { from { transform: scale(0.5); } }
+@keyframes star-pop { from { transform: scale(0) rotate(-40deg); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+.note-ok .note-icon { animation: ui-pop 0.4s cubic-bezier(0.3, 1.6, 0.5, 1); }

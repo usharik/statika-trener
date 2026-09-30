@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { generate } from './model/generator';
 import { randomSeed } from './model/rng';
-import type { BeamType, Level } from './model/types';
+import type { BeamType, Level, Problem } from './model/types';
 import { BeamDrawing, type DrawingProps } from './components/BeamDrawing';
 import { LangContext, translate, type Lang, type TKey } from './i18n';
 import { StepRelease } from './steps/StepRelease';
@@ -71,7 +71,7 @@ export default function App() {
   const [activeSupport, setActiveSupport] = useState<string | null>(null);
   const [view, setView] = useState<View>({});
   const [eqs, setEqs] = useState<UserEq[]>([]);
-  const [results, setResults] = useState<Record<string, number> | null>(null);
+  const [solvedResults, setSolvedResults] = useState<{ problem: Problem; values: Record<string, number> } | null>(null);
   const [hints, setHints] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -109,6 +109,9 @@ export default function App() {
     };
   }, []);
   const problem = useMemo(() => generate(seed, { level: settings.level, types: settings.types }), [seed, settings.level, settings.types]);
+  const setResults = (r: Record<string, number> | null) => setSolvedResults(r ? { problem, values: r } : null);
+  // výsledky platí jen pro úlohu, ke které patří (ochrana při změně úlohy/nastavení)
+  const results = solvedResults?.problem === problem ? solvedResults.values : null;
 
   useEffect(() => save('statika.settings', settings), [settings]);
   if (import.meta.env.DEV) (window as unknown as { __problem: unknown }).__problem = problem;
@@ -138,7 +141,14 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [problem]);
 
-  const newProblem = () => setSeed(randomSeed());
+  // krok a výsledky se musí vynulovat ve stejném vykreslení jako změna úlohy,
+  // jinak by se obrazovka „Hotovo“ na okamžik vykreslila s novou úlohou a starými výsledky
+  const newProblem = () => {
+    setStep(0);
+    setResults(null);
+    setEqs([]);
+    setSeed(randomSeed());
+  };
   const hint = () => setHints((h) => h + 1);
   const key = `${seed}-${attempt}`;
 
@@ -236,6 +246,7 @@ export default function App() {
               <span className="muted small">{t('lengthsNote')}</span>
             </div>
             <BeamDrawing
+              key={`${seed}-${attempt}`}
               compact={compact}
               problem={problem}
               released={released}
