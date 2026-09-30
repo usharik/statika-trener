@@ -15,6 +15,8 @@ interface Settings {
   types: BeamType[];
   lang: Lang;
   v?: number;
+  /** nevyplněno = podle systému */
+  theme?: 'light' | 'dark';
 }
 
 const ALL_TYPES: BeamType[] = ['simple', 'overhang', 'cantilever', 'gerber'];
@@ -75,6 +77,12 @@ export default function App() {
 
   const t = (k: TKey) => translate(settings.lang, k);
   const compact = useMedia('(max-width: 640px)');
+  const systemDark = useMedia('(prefers-color-scheme: dark)');
+  const theme = settings.theme ?? (systemDark ? 'dark' : 'light');
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0f1216' : '#f5f6f8');
+  }, [theme]);
 
   // výška přilepeného výkresu → CSS proměnná (aby se obsah při posunu nezasouval pod něj)
   const stickyRef = useRef<HTMLDivElement>(null);
@@ -172,6 +180,14 @@ export default function App() {
                 </button>
               ))}
             </div>
+            <button
+              className="btn btn-ghost theme-btn"
+              onClick={() => setSettings({ ...settings, theme: theme === 'dark' ? 'light' : 'dark' })}
+              title={t(theme === 'dark' ? 'themeLight' : 'themeDark')}
+              aria-label={t(theme === 'dark' ? 'themeLight' : 'themeDark')}
+            >
+              {theme === 'dark' ? '☀' : '☾'}
+            </button>
             <button className="btn btn-ghost" onClick={() => setShowSettings((s) => !s)} aria-expanded={showSettings}>
               {t('settings')}
             </button>
