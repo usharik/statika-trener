@@ -147,11 +147,11 @@ internal fun Stage(
         .zIndex(1f)
         .graphicsLayer {
             val shift = host.top - selfTop
-            translationY = if (shift > 0f && selfH < host.height * 0.55f) shift else 0f
+            translationY = if (shift > 0f && selfH < host.height * 0.4f) shift else 0f
         }
         .drawBehind {
             val shift = host.top - selfTop
-            if (shift > 0f && selfH < host.height * 0.55f) {
+            if (shift > 0f && selfH < host.height * 0.4f) {
                 // podklad, aby text pod obrázkem neprosvítal kolem zaoblených rohů a okrajů
                 val pad = 16.dp.toPx()
                 drawRect(c.bg, Offset(-pad, -pad), androidx.compose.ui.geometry.Size(this.size.width + 2 * pad, this.size.height + pad + 6.dp.toPx()))
@@ -282,7 +282,7 @@ fun Note(tone: Tone, text: L) {
 @Composable
 fun Chips(options: List<L>, selected: Int? = null, modifier: Modifier = Modifier, selectedSet: Set<Int> = emptySet(), onPick: (Int) -> Unit) {
     val c = LocalColors.current
-    FlowRow(modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(modifier.fillMaxWidth().padding(top = if (LocalInDock.current) 8.dp else 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         options.forEachIndexed { i, o ->
             val on = i == selected || i in selectedSet
             Surface(
@@ -321,63 +321,17 @@ class Opt(val label: L, val correct: Boolean = false, val why: L? = null)
  * Kvíz bez psaní. Nikdy jen „špatně“: 1. chyba → otázka-nápověda k té konkrétní volbě,
  * 2. chyba → [nudge], 3. chyba → ukáže správnou odpověď s vysvětlením. Po vyřešení kartu dokončí.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CardScope.Quiz(question: L, options: List<Opt>, explain: L, nudge: L? = null, columns: Int = 1) {
-    var misses by remember { mutableIntStateOf(0) }
-    var picked by remember { mutableStateOf<Int?>(null) }
-    var solved by remember { mutableStateOf(false) }
-    var msg by remember { mutableStateOf<Pair<Tone, L>?>(null) }
-    var extra by remember { mutableStateOf<L?>(null) }
-    val correct = options.indexOfFirst { it.correct }
+    val q = rememberQuiz(question, options, explain, nudge)
     val key = "quiz:" + question.cs
-    SideEffect { report(key, listOf(QUIZ_TASK to solved)) }
+    SideEffect { report(key, listOf(QUIZ_TASK to q.solved)) }
     Text(
         rich(question.t()), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = LocalColors.current.ink,
-        modifier = Modifier.padding(top = 14.dp).nagTarget(this, !solved),
+        modifier = Modifier.padding(top = 14.dp).nagTarget(this, !q.solved),
     )
-    FlowRow(
-        Modifier.fillMaxWidth().padding(top = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        maxItemsInEachRow = columns,
-    ) {
-        options.forEachIndexed { i, o ->
-            val sel = picked == i || (solved && i == correct)
-            ChoiceTile(sel, i == correct && sel, !solved || i == correct, onClick = {
-                if (solved) return@ChoiceTile
-                picked = i
-                if (o.correct) {
-                    solved = true
-                    extra = null
-                    msg = Tone.OK to explain
-                } else {
-                    misses++
-                    // vždy nejdřív nápověda k právě zvolené chybné možnosti
-                    val why = o.why ?: nudge ?: L("Podívej se ještě jednou na obrázek.", "Посмотри ещё раз на рисунок.")
-                    when {
-                        misses >= 3 -> {
-                            solved = true
-                            msg = Tone.NUDGE to why
-                            extra = explain
-                        }
-                        misses == 2 && nudge != null && nudge != why -> {
-                            msg = Tone.NUDGE to why
-                            extra = nudge
-                        }
-                        else -> {
-                            msg = Tone.NUDGE to why
-                            extra = null
-                        }
-                    }
-                }
-            }, modifier = Modifier.weight(1f)) {
-                Text(rich(o.label.t()), textAlign = TextAlign.Center, fontWeight = FontWeight.Medium, color = LocalColors.current.ink)
-            }
-        }
-    }
-    msg?.let { (tone, text) -> Note(tone, text) }
-    extra?.let { Note(Tone.HINT, it) }
+    q.Options(columns)
+    q.Feedback()
 }
 
 private val QUIZ_TASK = L("Odpověz na otázku", "Ответь на вопрос")
@@ -450,7 +404,11 @@ fun Modifier.nagTarget(scope: CardScope, active: Boolean): Modifier {
 @Composable
 fun ActionButton(text: L, enabled: Boolean = true, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        cz.usharik.statika.ui.SecondaryButton(text.t(), onClick = { if (enabled) onClick() })
+        // v doku je akce hlavní (plné tlačítko), ve výkladu vedlejší
+        // neaktivní (běží animace) je vidět – poloprůhledné
+        val m = Modifier.graphicsLayer { alpha = if (enabled) 1f else 0.4f }
+        if (LocalInDock.current) cz.usharik.statika.ui.PrimaryButton(text.t(), onClick = { if (enabled) onClick() }, modifier = m)
+        else cz.usharik.statika.ui.SecondaryButton(text.t(), onClick = { if (enabled) onClick() }, modifier = m)
     }
 }
 

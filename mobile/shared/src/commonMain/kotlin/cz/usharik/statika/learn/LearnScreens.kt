@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -173,6 +174,8 @@ private fun LessonScreen(nav: LearnNav.Open, progress: LearnProgress, onNav: (Le
     // odemčená je jen karta, jejíž úkoly žák opravdu splnil (ne jen „viděl“ nebo přeskočil odkazem z úlohy)
     val scope = remember(lesson.id, index) { CardScope(alreadyDone = progress.cardDone(lesson.id, index)) }
     LaunchedEffect(scope, scope.solvedHere) { if (scope.solvedHere) progress.markCardDone(lesson.id, index) }
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+    val screenH = maxHeight
     Column(Modifier.fillMaxSize()) {
         Header("${lesson.no} · ${lesson.title.t()}", "${index + 1} / ${lesson.cards.size}", back)
         // tečky postupu v lekci
@@ -182,9 +185,12 @@ private fun LessonScreen(nav: LearnNav.Open, progress: LearnProgress, onNav: (Le
             }
         }
         val sticky = remember { StickyHost() }
+        // přilepení obrázku se posuzuje podle výšky celé obrazovky – dok dole výkladu výšku ubírá
+        sticky.height = with(androidx.compose.ui.platform.LocalDensity.current) { screenH.toPx() }
+        val dock = remember(lesson.id, index) { DockHost() }
         Box(
             Modifier.weight(1f).fillMaxWidth().clipToBounds()
-                .onGloballyPositioned { sticky.top = it.positionInRoot().y; sticky.height = it.size.height.toFloat() },
+                .onGloballyPositioned { sticky.top = it.positionInRoot().y },
             contentAlignment = Alignment.TopCenter,
         ) {
             Column(
@@ -192,11 +198,15 @@ private fun LessonScreen(nav: LearnNav.Open, progress: LearnProgress, onNav: (Le
                     .padding(horizontal = 16.dp, vertical = 10.dp),
             ) {
                 // odkazy z karty (LearnJump) se vrátí právě sem
-                CompositionLocalProvider(LocalLearnHere provides nav.copy(card = index), LocalSticky provides sticky) {
+                CompositionLocalProvider(LocalLearnHere provides nav.copy(card = index), LocalSticky provides sticky, LocalDock provides dock) {
                     androidx.compose.runtime.key(lesson.id, index) { lesson.cards[index].content(scope) }
                 }
                 Spacer(Modifier.height(24.dp))
             }
+        }
+        // dok: co udělat teď + ovládání (nejvýš ~45 % výšky, jinak se posouvá)
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+            DockFrame(dock, Modifier.widthIn(max = 720.dp).heightIn(max = screenH * 0.45f).verticalScroll(rememberScrollState()))
         }
         // co chybí – ukáže se, když žák zkusí jít dál dřív, než splní úkoly
         var missing by remember(lesson.id, index) { mutableStateOf<List<L>>(emptyList()) }
@@ -208,7 +218,7 @@ private fun LessonScreen(nav: LearnNav.Open, progress: LearnProgress, onNav: (Le
                     // krátce – podrobnosti jsou v rámečku úkolů, který se právě zvýraznil a posunul do pohledu
                     rich(
                         if (now.size == 1) L("Ještě zbývá: ", "Ещё осталось: ").t() + t.pick(now[0])
-                        else L("Nejdřív splň všechny úkoly v rámečku ↑ (zbývá ${now.size})", "Сначала выполни все задания в рамке ↑ (осталось ${now.size})").t(),
+                        else L("Nejdřív splň všechny úkoly (zbývá ${now.size})", "Сначала выполни все задания (осталось ${now.size})").t(),
                     ),
                     color = c.ink, style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -255,6 +265,7 @@ private fun LessonScreen(nav: LearnNav.Open, progress: LearnProgress, onNav: (Le
             }
         }
     }
+}
 }
 
 /** Slovníček pojmů (česky – rusky). */

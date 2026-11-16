@@ -2,6 +2,9 @@ package cz.usharik.statika.learn
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -12,11 +15,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import cz.usharik.statika.model.SupportType
 import cz.usharik.statika.trainer.Tone
 import cz.usharik.statika.ui.Anchor
+import cz.usharik.statika.ui.LocalColors
 import cz.usharik.statika.ui.PrimBuilder
 import cz.usharik.statika.ui.StatikaColors
+import cz.usharik.statika.ui.rich
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.abs
@@ -63,15 +72,53 @@ private const val X0 = 50.0
 private const val MM = 52.0
 private fun gx(m: Double) = X0 + m * MM
 
+// ------------------------------------------------------------------ kroky se stavem venku (obrázek čte stav)
+
+/** Kvíz jako krok; stav drží karta, takže obrázek může reagovat na volbu. [more] = navíc do výkladu po vyřešení. */
+private fun QuizState.step9(columns: Int = 1, label: L = question, more: (@Composable () -> Unit)? = null): Step =
+    Step(label, solved, result = { Feedback(); more?.invoke() }) {
+        if (label != question) Text(rich(question.t()), style = MaterialTheme.typography.bodyMedium, color = LocalColors.current.ink, modifier = Modifier.padding(top = 4.dp))
+        Options(columns)
+        if (!solved) Feedback()
+    }
+
+/** Číselná odpověď jako krok. */
+private fun NumState.step9(label: L): Step =
+    Step(label, solved, result = { Feedback() }) {
+        Fields()
+        Buttons()
+        if (!solved) Feedback()
+    }
+
+/** Tip před pokusem: volba + potvrzení. Správnost ukáže až pokus v dalším kroku. */
+@Composable
+private fun tip9(label: L, options: List<L>, guess: Int?, onGuess: (Int) -> Unit): Step {
+    var sel by remember(label.cs) { mutableStateOf<Int?>(null) }
+    return Step(label, guess != null, result = { guess?.let { SmallText(L("Tvůj tip: " + options[it].cs, "Твой прогноз: " + options[it].ru)) } }) {
+        Chips(options, sel) { sel = it }
+        ActionButton(L("Potvrdit tip", "Подтвердить прогноз"), enabled = sel != null) { sel?.let(onGuess) }
+    }
+}
+
+/** Rovnice ve výkladu (bez velkého písma Readoutu, aby se dlouhá vešla na řádek); [dim] = ta „horší“ varianta. */
+@Composable
+private fun EqLine(text: String, note: L, dim: Boolean = false) {
+    val c = LocalColors.current
+    Text(rich(text), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = if (dim) c.inkSoft else c.ink, modifier = Modifier.padding(start = 30.dp, top = 4.dp))
+    Text(rich(note.t()), style = MaterialTheme.typography.bodySmall, color = if (dim) c.inkSoft else c.accent, modifier = Modifier.padding(start = 30.dp))
+}
+
 /**
  * Karta 0: kloub přenese sílu, ale ne moment. Po odebrání C se pravá část s kloubem otočí kolem K čím dál
  * rychleji a skončí svisle pověšená (tlumené kyvadlo). S tuhým spojem se nosník jen pružně prohne.
+ * Před každým pokusem tip.
  */
 @Composable
 private fun CardScope.HingeTest() {
     val t = tr()
     var rigid by remember { mutableIntStateOf(0) } // 0 = kloub, 1 = pevný spoj
     var guess by remember { mutableStateOf<Int?>(null) }
+    var guess2 by remember { mutableStateOf<Int?>(null) }
     var removed by remember { mutableStateOf(false) }
     var settled by remember { mutableStateOf(false) }
     var tried by remember { mutableStateOf(setOf<Int>()) }
@@ -126,6 +173,13 @@ private fun CardScope.HingeTest() {
             alpha.animateTo(1f, tween(300))
         }
     }
+    // po pokusu s kloubem: nový obrázek s tuhým spojem a podporou C (pro druhý tip a pokus)
+    LaunchedEffect(0 in tried) {
+        if (0 in tried && 1 !in tried && rigid == 0) {
+            delay(1500)
+            reset(1)
+        }
+    }
     val y = 80.0
     Stage(h = 240.0, description = t.pick(L("Nosník s vnitřním kloubem K", "Балка с промежуточным шарниром K"))) { c ->
         val a = alpha.value
@@ -160,55 +214,93 @@ private fun CardScope.HingeTest() {
         }
     }
     CardText(L(
-        "**Vnitřní kloub** K spojuje dvě části nosníku jako pant dveří: části se v něm mohou vůči sobě volně natočit. Odeber podporu C a porovnej kloub s tuhým spojem. Nejdřív odhadni, co udělá pravá část s kloubem.",
-        "**Промежуточный шарнир** K (vnitřní kloub) соединяет две части балки, как дверная петля: части могут свободно поворачиваться в нём друг относительно друга. Убери опору C и сравни шарнир с жёстким соединением. Сначала предскажи, что сделает правая часть с шарниром.",
+        "**Vnitřní kloub** K spojuje dvě části nosníku jako pant dveří: části se v něm mohou vůči sobě volně natočit.",
+        "**Промежуточный шарнир** K (vnitřní kloub) соединяет две части балки, как дверная петля: части могут свободно поворачиваться в нём друг относительно друга.",
     ))
-    Todo(
-        L("Odhadni, co udělá pravá část s kloubem bez podpory C", "Предскажи, что сделает правая часть с шарниром без опоры C") to (guess != null),
-        L("S kloubem odeber podporu C a počkej, až se pravá část uklidní", "С шарниром убери опору C и подожди, пока правая часть успокоится") to (0 in tried),
-        L("Přepni na tuhý spoj a odeber C znovu", "Переключи на жёсткое соединение и снова убери C") to (1 in tried),
+    val removeC: @Composable (Int) -> Unit = { want ->
+        ActionButton(L("Odeber podporu C", "Убрать опору C"), enabled = !removed && rigid == want && !alpha.isRunning) { removed = true }
+        if (removed && !settled) SmallText(L("Sleduj pravou část…", "Следи за правой частью…"))
+    }
+    Steps(
+        tip9(
+            L("Odebereme podporu C. Co udělá pravá část za kloubem?", "Уберём опору C. Что сделает правая часть за шарниром?"),
+            listOf(L("zůstane vodorovně", "останется горизонтально"), L("trochu se prohne", "немного прогнётся"), L("otočí se v K a spadne", "повернётся в K и упадёт")),
+            guess,
+        ) { guess = it },
+        Step(
+            L("Odeber podporu C a počkej, až se pravá část uklidní", "Убери опору C и подожди, пока правая часть успокоится"), 0 in tried,
+            result = {
+                Note(if (guess == 2) Tone.OK else Tone.INFO, L(
+                    (if (guess == 2) "Tip sedí. " else "") + "Pravá část se v kloubu otáčí **čím dál rychleji** – moment síly F a tíhy k bodu K nemá nic, co by ho vyrovnalo. Uklidní se, až visí svisle: pak síly míří přímo do K a jejich rameno je 0. Kloub ji udrží (přenese **sílu**), ale otáčení nezabrání (**moment** nepřenese).",
+                    (if (guess == 2) "Прогноз верен. " else "") + "Правая часть поворачивается в шарнире **всё быстрее** — моменту силы F и веса относительно K нечем противостоять. Успокаивается, только когда висит вертикально: тогда силы направлены прямо в K и плечо у них 0. Шарнир её удерживает (передаёт **силу**), но повороту не мешает (**момент** не передаёт).",
+                ))
+            },
+        ) { removeC(0) },
+        tip9(
+            L("Kloub vyměníme za tuhý spoj. Co se stane bez podpory C teď?", "Заменим шарнир жёстким соединением. Что будет без опоры C теперь?"),
+            listOf(L("spadne stejně", "упадёт так же"), L("jen se trochu prohne", "лишь немного прогнётся"), L("nestane se vůbec nic", "ничего не произойдёт")),
+            guess2,
+        ) { guess2 = it },
+        Step(
+            L("Odeber podporu C u tuhého spoje a porovnej", "Убери опору C при жёстком соединении и сравни"), 1 in tried,
+            result = {
+                Note(if (guess2 == 1) Tone.OK else Tone.INFO, L(
+                    (if (guess2 == 1) "Tip sedí. " else "") + "Tuhý spoj přenese i moment – nosník drží, převislý konec se jen pružně prohne (na obrázku zvětšeně) a ustálí se.",
+                    (if (guess2 == 1) "Прогноз верен. " else "") + "Жёсткое соединение передаёт и момент — балка держится, консоль лишь упруго прогибается (на рисунке увеличено) и успокаивается.",
+                ))
+                SmallText(L(
+                    "Kloub moment nepřenese. Proto u stojícího nosníku platí [[M_K]] = 0: součet momentů všech sil na **jedné** části nosníku k bodu K je nula.",
+                    "Шарнир не передаёт момент. Поэтому у неподвижной балки [[M_K]] = 0: сумма моментов всех сил, действующих на **одну** часть балки, относительно точки K равна нулю.",
+                ))
+            },
+        ) { removeC(1) },
+        after = {
+            Chips(listOf(L("kloub", "шарнир"), L("tuhý spoj", "жёсткое соединение")), rigid) { if (it != rigid) reset(it) }
+            if (!removed) ActionButton(L("Odeber podporu C", "Убрать опору C"), enabled = !alpha.isRunning) { removed = true }
+            else ActionButton(L("Nový pokus (s podporou C)", "Новая попытка (с опорой C)"), enabled = settled) { reset() }
+        },
     )
-    Chips(
-        listOf(L("zůstane vodorovně", "останется горизонтально"), L("trochu se prohne", "немного прогнётся"), L("otočí se v K a spadne", "повернётся в K и упадёт")),
-        guess,
-    ) { if (!removed || rigid == 1) guess = it }
-    Chips(listOf(L("kloub", "шарнир"), L("tuhý spoj", "жёсткое соединение")), rigid) { if (it != rigid) reset(it) }
-    if (!removed) {
-        ActionButton(L("Odeber podporu C", "Убрать опору C"), enabled = guess != null) { removed = true }
-        if (guess == null) SmallText(L("Nejdřív vyber odhad nahoře.", "Сначала выбери предсказание выше."))
-    } else if (settled) {
-        ActionButton(L("Nový pokus (s podporou C)", "Новая попытка (с опорой C)")) { reset() }
-    }
-    if (removed && settled) {
-        if (rigid == 0) Note(if (guess == 2) Tone.OK else Tone.NUDGE, L(
-            (if (guess == 2) "Odhad sedí. " else "") + "Pravá část se v kloubu otáčí **čím dál rychleji** – moment síly F a tíhy k bodu K nemá nic, co by ho vyrovnalo. Uklidní se, až visí svisle: pak síly míří přímo do K a jejich rameno je 0. Kloub ji udrží (přenese **sílu**), ale otáčení nezabrání (**moment** nepřenese).",
-            (if (guess == 2) "Предсказание верное. " else "") + "Правая часть поворачивается в шарнире **всё быстрее** — моменту силы F и веса относительно K нечем противостоять. Успокаивается, только когда висит вертикально: тогда силы направлены прямо в K и плечо у них 0. Шарнир её удерживает (передаёт **силу**), но повороту не мешает (**момент** не передаёт).",
-        ))
-        else Note(Tone.INFO, L(
-            "Tuhý spoj přenese i moment – nosník drží, převislý konec se jen pružně prohne (na obrázku zvětšeně) a ustálí se.",
-            "Жёсткое соединение передаёт и момент — балка держится, консоль лишь упруго прогибается (на рисунке увеличено) и успокаивается.",
-        ))
-    }
-    if (tried.size == 2) {
-        SmallText(L(
-            "Kloub moment nepřenese. Proto u stojícího nosníku platí [[M_K]] = 0: součet momentů všech sil na **jedné** části nosníku k bodu K je nula.",
-            "Шарнир не передаёт момент. Поэтому у неподвижной балки [[M_K]] = 0: сумма моментов всех сил, действующих на **одну** часть балки, относительно точки K равна нулю.",
-        ))
-    }
 }
 
 /**
  * Karta 1: M_K = 0 jen z jedné části. Části jsou nakreslené odděleně se silami v kloubu (K_x, K_y stejně velké,
- * opačné). Žák nejdřív odhadne, ze které části vyjde rovnice s jednou neznámou, pak ji uvidí a spočítá R_C.
+ * opačné). Žák vybere část, ze které vyjde rovnice s jednou neznámou, a spočítá R_C.
  */
 @Composable
 private fun CardScope.OnePart() {
     val t = tr()
-    var guess by remember { mutableStateOf<Int?>(null) }
-    var side by remember { mutableStateOf<Int?>(null) }
-    var seen by remember { mutableStateOf(setOf<Int>()) }
-    var rc by remember { mutableStateOf<Int?>(null) }
-    val guessOk = guess == 1
+    val left = "[[M_K]] = −[[R_Ay]]·4 − [[R_B]]·1 + [[F_1]]·2,5 = 0"
+    val right = "[[M_K]] = [[R_C]]·2 − 6·1 = 0"
+    val q1 = rememberQuiz(
+        L("Ze které části vyjde rovnice s jedinou neznámou?", "Из какой части получится уравнение с одной неизвестной?"),
+        listOf(
+            Opt(
+                L("z levé části", "из левой части"),
+                why = L(
+                    "Levá část: $left. Zůstaly by dvě neznámé – [[R_Ay]] i [[R_B]] mají k bodu K nenulové rameno.",
+                    "Левая часть: $left. Остались бы две неизвестные — у [[R_Ay]] и [[R_B]] плечо относительно K не нулевое.",
+                ),
+            ),
+            Opt(L("z pravé části", "из правой части"), correct = true),
+        ),
+        explain = L(
+            "Na pravé části je jediná neznámá reakce [[R_C]] – sílu [[F_2]] = 6 kN známe.",
+            "На правой части одна неизвестная реакция [[R_C]] — силу [[F_2]] = 6 кН мы знаем.",
+        ),
+    )
+    val nC = rememberNum(
+        L("R_C z pravé části", "R_C из правой части"),
+        listOf(NumSpec(L("[[R_C]]", "[[R_C]]"), 3.0, t.pick(L("kN", "кН")))),
+        explain = L(
+            "[[R_C]]·2 = 6·1 → [[R_C]] = 3 kN. Tahle rovnice je **navíc** ke třem rovnicím pro celý nosník – díky ní spočítáš všechny čtyři reakce.",
+            "[[R_C]]·2 = 6·1 → [[R_C]] = 3 кН. Это уравнение — **дополнительное** к трём уравнениям для всей балки — благодаря нему находятся все четыре реакции.",
+        ),
+        traps = listOf(
+            NumTrap.near(L("[[F_2]] má rameno 1 m, [[R_C]] ale 2 m. Momenty se musí rovnat, ne síly.", "У [[F_2]] плечо 1 м, а у [[R_C]] — 2 м. Равны должны быть моменты, а не силы."), 6.0),
+            NumTrap.near(L("Ramena jsi prohodil: [[R_C]] je od K 2 m daleko, [[F_2]] jen 1 m.", "Плечи перепутаны: [[R_C]] находится в 2 м от K, а [[F_2]] — в 1 м."), 12.0),
+        ),
+    )
+    val side = if (q1.solved) 1 else q1.picked
     // vlastní rozvržení: části od sebe, ať jsou vidět síly v kloubu
     val y = 100.0
     val s = 44.0
@@ -238,7 +330,7 @@ private fun CardScope.OnePart() {
         force(rx(5.0), y - 58, rx(5.0), y - 5, c.load, alpha = ra)
         text(rx(5.0) + 8, y - 46, " = 6 kN", c.load, 13.0, Anchor.START, sym = "F_2", alpha = ra)
         force(rx(6.0), y + 56, rx(6.0), y + 6, c.react, alpha = ra)
-        text(rx(6.0) - 8, y + 50, if (rc == 0) " = 3 kN" else null, c.react, 13.0, Anchor.END, sym = "R_C", alpha = ra)
+        text(rx(6.0) - 8, y + 50, if (nC.solved) " = 3 kN" else null, c.react, 13.0, Anchor.END, sym = "R_C", alpha = ra)
         // síly v kloubu: na každou část stejně velké a opačné
         val mid = (kl + kr) / 2
         force(mid, y, kl + 8, y, c.derived, 2.0, 9.0, alpha = la)
@@ -265,59 +357,66 @@ private fun CardScope.OnePart() {
         text(rx(6.0) + 6, yd + 4, "m", c.inkSoft, 11.0, Anchor.START)
     }
     CardText(L(
-        "Rovnice kloubu [[M_K]] = 0: sečti momenty k bodu K, ale jen od sil na **jedné** části. Části jsou nakreslené odděleně – v kloubu na sebe působí silami [[K_x]], [[K_y]] (na každou část stejně velkými, opačnými).",
-        "Уравнение шарнира [[M_K]] = 0: сложи моменты относительно K, но только от сил на **одной** части. Части нарисованы отдельно — в шарнире они действуют друг на друга силами [[K_x]], [[K_y]] (на каждую часть равными и противоположными).",
+        "Rovnice kloubu [[M_K]] = 0: sečti momenty k bodu K, ale jen od sil na **jedné** části nosníku. Části jsou nakreslené odděleně; v kloubu na sebe působí silami [[K_x]], [[K_y]] (stejně velkými, opačnými).",
+        "Уравнение шарнира [[M_K]] = 0: сложи моменты относительно K, но только от сил на **одной** части балки. Части нарисованы отдельно; в шарнире они действуют друг на друга силами [[K_x]], [[K_y]] (равными и противоположными).",
     ))
-    Todo(
-        L("Odhadni: ze které části vyjde rovnice s **jedinou** neznámou?", "Предскажи: из какой части получится уравнение с **одной** неизвестной?") to guessOk,
-        L("Prohlédni si rovnici pro levou i pravou část", "Посмотри уравнение для левой и для правой части") to (seen.size == 2),
-        L("Spočítej [[R_C]]", "Найди [[R_C]]") to (rc == 0),
+    Steps(
+        q1.step9(columns = 2) {
+            EqLine(left, L("levá část: 2 neznámé", "левая часть: 2 неизвестные"), dim = true)
+            EqLine(right, L("pravá část: 1 neznámá", "правая часть: 1 неизвестная"))
+            SmallText(L(
+                "Momenty ↺ bereme kladně. Síly v kloubu [[K_x]], [[K_y]] **působí**, jen k bodu K mají rameno 0 – proto v rovnici nejsou. Stejně tak [[R_Ax]] v ose nosníku.",
+                "Моменты ↺ считаем положительными. Силы в шарнире [[K_x]], [[K_y]] **действуют**, просто плечо у них относительно K равно 0 — поэтому в уравнении их нет. Так же и [[R_Ax]] на оси балки.",
+            ))
+        },
+        nC.step9(L("Pravá část: [[R_C]] · 2 − 6 · 1 = 0. Kolik je [[R_C]]?", "Правая часть: [[R_C]] · 2 − 6 · 1 = 0. Чему равна [[R_C]]?")),
     )
-    if (!guessOk) {
-        Chips(listOf(L("z levé části", "из левой части"), L("z pravé části", "из правой части")), guess) { guess = it }
-        if (guess == 0) Note(Tone.NUDGE, L(
-            "Spočítej neznámé reakce na levé části: [[R_Ay]] i [[R_B]] mají k bodu K nenulové rameno – zůstaly by v rovnici dvě.",
-            "Посчитай неизвестные реакции на левой части: у [[R_Ay]] и [[R_B]] плечо относительно K не нулевое — в уравнении остались бы две.",
-        ))
-    } else {
-        Chips(listOf(L("levá část", "левая часть"), L("pravá část", "правая часть")), side) {
-            side = it
-            seen = seen + it
-        }
-        when (side) {
-            0 -> Readout("[[M_K]] = −[[R_Ay]]·4 − [[R_B]]·1 + [[F_1]]·2,5 = 0")
-            1 -> Readout("[[M_K]] = [[R_C]]·2 − 6·1 = 0")
-            else -> {}
-        }
-        if (side != null) SmallText(L(
-            "Momenty ↺ bereme kladně. Síly v kloubu [[K_x]], [[K_y]] **působí**, jen k bodu K mají rameno 0 – proto v rovnici nejsou. Stejně tak [[R_Ax]] v ose nosníku.",
-            "Моменты ↺ считаем положительными. Силы в шарнире [[K_x]], [[K_y]] **действуют**, просто плечо у них относительно K равно 0 — поэтому в уравнении их нет. Так же и [[R_Ax]] на оси балки.",
-        ))
-        if (seen.size == 2) {
-            CardText(L("Kolik je [[R_C]]?", "Чему равна [[R_C]]?"))
-            Chips(listOf(L("3 kN", "3 кН"), L("6 kN", "6 кН"), L("12 kN", "12 кН")), rc) { if (rc != 0) rc = it }
-            when (rc) {
-                0 -> Note(Tone.OK, L(
-                    "[[R_C]]·2 = 6·1 → [[R_C]] = 3 kN. Tahle rovnice je **navíc** ke třem rovnicím pro celý nosník – díky ní spočítáš všechny čtyři reakce.",
-                    "[[R_C]]·2 = 6·1 → [[R_C]] = 3 кН. Это уравнение — **дополнительное** к трём уравнениям для всей балки — благодаря нему находятся все четыре реакции.",
-                ))
-                1 -> Note(Tone.NUDGE, L("[[F_2]] má rameno 1 m, [[R_C]] ale 2 m. Momenty se musí rovnat, ne síly.", "У [[F_2]] плечо 1 м, а у [[R_C]] — 2 м. Равны должны быть моменты, а не силы."))
-                2 -> Note(Tone.NUDGE, L("Ramena jsi prohodil: [[R_C]] je od K 2 m daleko, [[F_2]] jen 1 m.", "Плечи перепутаны: [[R_C]] находится в 2 м от K, а [[F_2]] — в 1 м."))
-                else -> {}
-            }
-        }
-    }
 }
 
-/** Karta 2: n neznámých vs r rovnic – žák uvolní podpory, neznámé spočítá sám a posoudí, jestli nosník drží. */
+/** Karta 2: n neznámých vs r rovnic – žák spočítá neznámé ze značek podpor, pak uvidí uvolnění a posoudí, jestli nosník drží. */
 @Composable
 private fun CardScope.CountUnknowns() {
     val t = tr()
     var released by remember { mutableStateOf(setOf<Int>()) }
-    var answer by remember { mutableStateOf<Int?>(null) }
-    var stable by remember { mutableStateOf<Int?>(null) }
+    var demoDone by remember { mutableStateOf(false) }
+    val qN = rememberQuiz(
+        L("Kolik neznámých reakcí n dají podpory A, B a C dohromady?", "Сколько неизвестных реакций n дают опоры A, B и C вместе?"),
+        listOf(
+            Opt(L("n = 3", "n = 3"), why = L("Pevná kloubová podpora A má dvě reakce, ne jednu.", "У шарнирно-неподвижной опоры A две реакции, а не одна.")),
+            Opt(L("n = 4", "n = 4"), correct = true),
+            Opt(L("n = 5", "n = 5"), why = L("Posuvné podpory B a C mají každá jen jednu reakci.", "У подвижных опор B и C по одной реакции.")),
+        ),
+        explain = L("A: 2 ([[R_Ax]], [[R_Ay]]), B: 1, C: 1 → n = 4 = r.", "A: 2 ([[R_Ax]], [[R_Ay]]), B: 1, C: 1 → n = 4 = r."),
+    )
+    val qS = rememberQuiz(
+        L("Počet sedí. Může se přesto některá část nosníku pohnout?", "Число сходится. Может ли всё же какая-то часть балки сдвинуться?"),
+        listOf(
+            Opt(L("ne – každému pohybu něco brání", "нет — каждому движению что-то мешает"), correct = true),
+            Opt(
+                L("ano – celý nosník ujede vodorovně", "да — вся балка уедет по горизонтали"),
+                why = L("Pevná kloubová podpora A má i vodorovnou reakci [[R_Ax]] – posunu brání.", "У шарнирно-неподвижной опоры A есть и горизонтальная реакция [[R_Ax]] — она мешает сдвигу."),
+            ),
+            Opt(
+                L("ano – pravá část se otočí kolem K", "да — правая часть повернётся вокруг K"),
+                why = L("Pravou část drží podpora C – bez ní by se otočila (vzpomeň si na první kartu).", "Правую часть держит опора C — без неё она бы повернулась (вспомни первую карточку)."),
+            ),
+        ),
+        explain = L(
+            "Ano, drží: A brání posunu vodorovně i svisle, B brání otočení levé části kolem A a C otočení pravé části kolem K. Neznámých je stejně jako rovnic **a** podpory nedovolí žádný pohyb – nosník je **staticky určitý**.",
+            "Да, держится: A не даёт сдвига ни по горизонтали, ни по вертикали, B мешает повороту левой части вокруг A, а C — повороту правой части вокруг K. Неизвестных столько же, сколько уравнений, **и** опоры не допускают никакого движения — балка **статически определима**.",
+        ),
+    )
+    // po správném počtu: podpory se postupně promění v šipky
+    LaunchedEffect(qN.solved) {
+        if (!qN.solved) return@LaunchedEffect
+        for (i in 0..2) {
+            delay(800)
+            released = released + i
+        }
+        delay(900)
+        demoDone = true
+    }
     val y = 105.0
-    val all = released.size == 3
     Stage(h = 210.0, description = t.pick(L("Nosník s kloubem: počítání neznámých reakcí", "Балка с шарниром: подсчёт неизвестных реакций"))) { c ->
         support(SupportType.PIN, gx(0.0), y, c, "A", ghost = 0 in released)
         support(SupportType.ROLLER, gx(3.0), y, c, "B", ghost = 1 in released)
@@ -339,63 +438,24 @@ private fun CardScope.CountUnknowns() {
             force(gx(6.0), y + 60, gx(6.0), y + 6, c.react)
             text(gx(6.0) - 8, y + 52, null, c.react, 14.0, Anchor.END, sym = "R_C")
         }
+        if (released.size == 3) text(200.0, y + 92, "n = 4 = r", c.accent, 15.0, bold = true)
     }
     CardText(L(
-        "Rovnic máme r = 4: tři pro celý nosník a jednu za kloub. Uvolni podpory: každá modrá šipka je jedna neznámá reakce, jejich počet označíme n.",
-        "Уравнений у нас r = 4: три для всей балки и одно за шарнир. Освободи балку от опор: каждая синяя стрелка — одна неизвестная реакция, их число обозначим n.",
+        "Rovnic máme r = 4: tři pro celý nosník a jednu za kloub. Počet neznámých reakcí označíme n.",
+        "Уравнений у нас r = 4: три для всей балки и одно за шарнир. Число неизвестных реакций обозначим n.",
     ))
-    Todo(
-        L("Klepni na „uvolni A“, „uvolni B“ i „uvolni C“ (${released.size}/3)", "Нажми «освободить A», «освободить B» и «освободить C» (${released.size}/3)") to all,
-        L("Spočítej modré šipky a vyber správné n", "Посчитай синие стрелки и выбери верное n") to (answer == 1),
-        L("Posuď, jestli se nosník může pohnout", "Реши, может ли балка сдвинуться") to (stable == 0),
+    Steps(
+        qN.step9(columns = 3),
+        Step(L("Sleduj: uvolníme A, B a C – každá modrá šipka je jedna neznámá", "Смотри: освобождаем A, B и C — каждая синяя стрелка — одна неизвестная"), demoDone) {
+            SmallText(L("Sleduj obrázek…", "Смотри на рисунок…"))
+        },
+        qS.step9 {
+            SmallText(L(
+                "Kdyby C byla pevná kloubová podpora (2 reakce), bylo by n = 5 > r = 4. Nosník by byl staticky neurčitý – rovnice rovnováhy by nestačily.",
+                "Если бы C была шарнирно-неподвижной опорой (2 реакции), было бы n = 5 > r = 4. Балка стала бы статически неопределимой — уравнений равновесия не хватило бы.",
+            ))
+        },
     )
-    Chips(
-        listOf(
-            L("uvolni A" + if (0 in released) " ✓" else "", "освободить A" + if (0 in released) " ✓" else ""),
-            L("uvolni B" + if (1 in released) " ✓" else "", "освободить B" + if (1 in released) " ✓" else ""),
-            L("uvolni C" + if (2 in released) " ✓" else "", "освободить C" + if (2 in released) " ✓" else ""),
-        ),
-    ) { released = released + it }
-    if (all) {
-        CardText(L("Kolik je neznámých reakcí (počet n)?", "Сколько неизвестных реакций (число n)?"))
-        // po správné odpovědi už volbu neměníme (úkol by se zpětně odškrtl)
-        Chips(listOf(L("n = 3", "n = 3"), L("n = 4", "n = 4"), L("n = 5", "n = 5")), answer) { if (answer != 1) answer = it }
-        when (answer) {
-            1 -> Readout("n = 4 = r", ok = true)
-            null -> {}
-            else -> Note(Tone.NUDGE, L(
-                "Spočítej modré šipky na obrázku: každá je jedna neznámá. Pevná kloubová podpora A má dvě.",
-                "Посчитай синие стрелки на рисунке: каждая — одна неизвестная. У шарнирно-неподвижной опоры A их две.",
-            ))
-        }
-    }
-    if (answer == 1) {
-        CardText(L(
-            "Počet sedí. Ale **drží** nosník opravdu? Může se některá část pohnout?",
-            "Число сходится. Но **держится** ли балка на самом деле? Может ли какая-то часть сдвинуться?",
-        ))
-        Chips(
-            listOf(
-                L("ne – každému pohybu něco brání", "нет — каждому движению что-то мешает"),
-                L("ano – celý nosník ujede vodorovně", "да — вся балка уедет по горизонтали"),
-                L("ano – pravá část se otočí kolem K", "да — правая часть повернётся вокруг K"),
-            ),
-            stable,
-        ) { if (stable != 0) stable = it }
-        when (stable) {
-            0 -> Note(Tone.OK, L(
-                "Ano, drží: A brání posunu vodorovně i svisle, B brání otočení levé části kolem A a C otočení pravé části kolem K. Neznámých je stejně jako rovnic **a** podpory nedovolí žádný pohyb – nosník je **staticky určitý**.",
-                "Да, держится: A не даёт сдвига ни по горизонтали, ни по вертикали, B мешает повороту левой части вокруг A, а C — повороту правой части вокруг K. Неизвестных столько же, сколько уравнений, **и** опоры не допускают никакого движения — балка **статически определима**.",
-            ))
-            1 -> Note(Tone.NUDGE, L("Pevná kloubová podpora A má i vodorovnou reakci [[R_Ax]] – posunu brání.", "У шарнирно-неподвижной опоры A есть и горизонтальная реакция [[R_Ax]] — она мешает сдвигу."))
-            2 -> Note(Tone.NUDGE, L("Pravou část drží podpora C – bez ní by se otočila (vzpomeň si na první kartu).", "Правую часть держит опора C — без неё она бы повернулась (вспомни первую карточку)."))
-            else -> {}
-        }
-        if (stable == 0) SmallText(L(
-            "Kdyby C byla pevná kloubová podpora (2 reakce), bylo by n = 5 > r = 4. Nosník by byl staticky neurčitý – rovnice rovnováhy by nestačily.",
-            "Если бы C была шарнирно-неподвижной опорой (2 реакции), было бы n = 5 > r = 4. Балка стала бы статически неопределимой — уравнений равновесия не хватило бы.",
-        ))
-    }
 }
 
 /**
@@ -408,6 +468,17 @@ private fun CardScope.HowMany() {
     var pick by remember { mutableStateOf(setOf<Int>()) }
     var checked by remember { mutableStateOf<Set<Int>?>(null) }
     var ok by remember { mutableStateOf(false) }
+    val qSide = rememberQuiz(
+        L("Ze které části vezmeš [[M_K]] = 0, aby v ní byla jen [[R_B]]?", "Из какой части возьмёшь [[M_K]] = 0, чтобы в нём была только [[R_B]]?"),
+        listOf(
+            Opt(L("z levé", "из левой"), why = L("Na levé části je vetknutí A se třemi neznámými.", "На левой части — заделка A с тремя неизвестными.")),
+            Opt(L("z pravé", "из правой"), correct = true),
+        ),
+        explain = L(
+            "Na pravé části je jen [[R_B]] (síly v kloubu mají k K rameno 0). Obvykle se bere [[M_K]] = 0 z té části, kde zůstane nejméně neznámých.",
+            "На правой части только [[R_B]] (у сил в шарнире плечо относительно K равно 0). Обычно [[M_K]] = 0 берут для той части, где остаётся меньше всего неизвестных.",
+        ),
+    )
     Stage(h = 170.0, description = L("Nosník s jedním vnitřním kloubem", "Балка с одним промежуточным шарниром").t()) { c ->
         val y = 80.0
         support(SupportType.FIXED, gx(0.0), y, c, "A", wallLeft = true)
@@ -420,49 +491,57 @@ private fun CardScope.HowMany() {
         text(gx(6.0) - 10, y + 62, t.pick(L("n = 3 + 1 = 4 neznámé", "n = 3 + 1 = 4 неизвестных")), c.react, 13.0, Anchor.END)
     }
     CardText(L(
-        "Vetknutí A má 3 neznámé reakce, posuvná podpora B jednu – celkem **4**. Sestav soustavu rovnic, ze které je spočítáš: vyber rovnice a dej „Zkontrolovat“.",
-        "У заделки A 3 неизвестные реакции, у подвижной опоры B одна — всего **4**. Составь систему уравнений, из которой их найдёшь: выбери уравнения и нажми «Проверить».",
+        "Vetknutí A má 3 neznámé reakce, posuvná podpora B jednu – celkem **4**. K dispozici jsou rovnice celého nosníku (Σ[[F_x]], Σ[[F_y]], Σ[[M_A]]) a rovnice kloubu [[M_K]] = 0 pro levou i pravou část.",
+        "У заделки A 3 неизвестные реакции, у подвижной опоры B одна — всего **4**. В распоряжении уравнения всей балки (Σ[[F_x]], Σ[[F_y]], Σ[[M_A]]) и уравнение шарнира [[M_K]] = 0 для левой и для правой части.",
     ))
-    Todo(L("Sestav soustavu nezávislých rovnic", "Составь систему независимых уравнений") to ok)
     val opts = listOf(
-        L("Σ[[F_x]] = 0 (celý nosník)", "Σ[[F_x]] = 0 (вся балка)"),
-        L("Σ[[F_y]] = 0 (celý nosník)", "Σ[[F_y]] = 0 (вся балка)"),
-        L("Σ[[M_A]] = 0 (celý nosník)", "Σ[[M_A]] = 0 (вся балка)"),
-        L("[[M_K]] = 0 (levá část)", "[[M_K]] = 0 (левая часть)"),
-        L("[[M_K]] = 0 (pravá část)", "[[M_K]] = 0 (правая часть)"),
+        L("Σ[[F_x]] = 0", "Σ[[F_x]] = 0"),
+        L("Σ[[F_y]] = 0", "Σ[[F_y]] = 0"),
+        L("Σ[[M_A]] = 0", "Σ[[M_A]] = 0"),
+        L("[[M_K]] = 0 levá", "[[M_K]] = 0 левая"),
+        L("[[M_K]] = 0 pravá", "[[M_K]] = 0 правая"),
     )
-    Chips(opts, selectedSet = pick) {
-        if (ok) return@Chips
-        pick = if (it in pick) pick - it else pick + it
-        checked = null
-    }
-    if (!ok) ActionButton(L("Zkontrolovat (vybráno ${pick.size})", "Проверить (выбрано ${pick.size})")) {
-        checked = pick
-        val moments = pick.count { it >= 2 }
-        ok = pick.size == 4 && 0 in pick && 1 in pick && moments == 2
-    }
-    val ch = checked
-    if (ok) Note(Tone.OK, L(
-        "r = 4 nezávislé rovnice na 4 neznámé. Obvykle tři rovnice celku + jedna z kloubu: [[M_K]] = 0 z té části, kde zůstane nejméně neznámých (tady pravá – jen [[R_B]]).",
-        "r = 4 независимых уравнения на 4 неизвестные. Обычно три уравнения для всей балки + одно от шарнира: [[M_K]] = 0 для той части, где останется меньше всего неизвестных (здесь правая — только [[R_B]]).",
-    ))
-    else if (ch != null) {
-        val moments = ch.count { it >= 2 }
-        Note(Tone.NUDGE, when {
-            moments == 3 -> L(
-                "Levá + pravá část = celý nosník. Momenty obou částí k K dohromady dají momentovou rovnici celého nosníku – jedna ze tří momentových rovnic je jen součtem ostatních. Nezávislé jsou jen **dvě**.",
-                "Левая + правая часть = вся балка. Моменты обеих частей относительно K вместе дают уравнение моментов всей балки — одно из трёх уравнений моментов лишь сумма остальных. Независимых только **два**.",
-            )
-            0 !in ch || 1 !in ch -> L(
-                "Bez silových rovnic celku Σ[[F_x]] a Σ[[F_y]] nespočítáš vodorovnou ani svislou reakci vetknutí – momentové rovnice je nenahradí.",
-                "Без уравнений сил для всей балки Σ[[F_x]] и Σ[[F_y]] не найти горизонтальную и вертикальную реакции заделки — уравнения моментов их не заменят.",
-            )
-            else -> L(
-                "Neznámé jsou 4, rovnic potřebuješ taky 4. Přidej momentovou rovnici – k bodu A nebo z kloubu.",
-                "Неизвестных 4, значит, и уравнений нужно 4. Добавь уравнение моментов — относительно A или от шарнира.",
-            )
-        })
-    }
+    Steps(
+        Step(
+            L("Vyber rovnice, ze kterých spočítáš všechny 4 neznámé", "Выбери уравнения, из которых найдёшь все 4 неизвестные"), ok,
+            result = {
+                Note(Tone.OK, L(
+                    "r = 4 nezávislé rovnice na 4 neznámé: obě silové rovnice celku a **dvě** momentové. Třetí momentová by byla jen součtem ostatních (levá + pravá část = celek).",
+                    "r = 4 независимых уравнения на 4 неизвестные: оба уравнения сил для всей балки и **два** уравнения моментов. Третье уравнение моментов было бы лишь суммой остальных (левая + правая часть = вся балка).",
+                ))
+            },
+        ) {
+            Chips(opts, selectedSet = pick) {
+                if (ok) return@Chips
+                pick = if (it in pick) pick - it else pick + it
+                checked = null
+            }
+            ActionButton(L("Zkontrolovat (vybráno ${pick.size})", "Проверить (выбрано ${pick.size})"), enabled = pick.isNotEmpty()) {
+                checked = pick
+                val moments = pick.count { it >= 2 }
+                ok = pick.size == 4 && 0 in pick && 1 in pick && moments == 2
+            }
+            val ch = checked
+            if (ch != null && !ok) {
+                val moments = ch.count { it >= 2 }
+                Note(Tone.NUDGE, when {
+                    moments == 3 -> L(
+                        "Levá + pravá část = celý nosník. Momenty obou částí k K dohromady dají momentovou rovnici celku – jedna ze tří momentových rovnic je jen součtem ostatních. Nezávislé jsou jen **dvě**.",
+                        "Левая + правая часть = вся балка. Моменты обеих частей относительно K вместе дают уравнение моментов всей балки — одно из трёх лишь сумма остальных. Независимых только **два**.",
+                    )
+                    0 !in ch || 1 !in ch -> L(
+                        "Bez silových rovnic celku Σ[[F_x]] a Σ[[F_y]] nespočítáš vodorovnou ani svislou reakci vetknutí – momentové rovnice je nenahradí.",
+                        "Без уравнений сил для всей балки Σ[[F_x]] и Σ[[F_y]] не найти горизонтальную и вертикальную реакции заделки — уравнения моментов их не заменят.",
+                    )
+                    else -> L(
+                        "Neznámé jsou 4, rovnic potřebuješ taky 4. Přidej momentovou rovnici – k bodu A nebo z kloubu.",
+                        "Неизвестных 4, значит, и уравнений нужно 4. Добавь уравнение моментов — относительно A или от шарнира.",
+                    )
+                })
+            }
+        },
+        qSide.step9(columns = 2),
+    )
 }
 
 /**
@@ -473,13 +552,30 @@ private fun CardScope.HowMany() {
 private fun CardScope.EnoughButHolds() {
     val t = tr()
     var guess by remember { mutableStateOf<Int?>(null) }
-    var why by remember { mutableStateOf<Int?>(null) }
     var pushed by remember { mutableStateOf(false) }
     var running by remember { mutableStateOf(false) }
     var x by remember { mutableDoubleStateOf(0.0) } // posun dolního nosníku (jednotky obrázku)
     var push by remember { mutableStateOf(false) } // právě působí síla H
     val alpha = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
+    val qWhy = rememberQuiz(
+        L("Co dolnímu nosníku chybí?", "Чего не хватает нижней балке?"),
+        listOf(
+            Opt(L("vodorovná reakce – žádná podpora nebrání posunu", "горизонтальная реакция — ни одна опора не мешает сдвигу"), correct = true),
+            Opt(
+                L("další svislá podpora", "ещё одна вертикальная опора"),
+                why = L("Čtvrtá posuvná podpora by přidala zase jen svislou reakci. Vodorovně by nosník ujel stejně.", "Четвёртая подвижная опора добавила бы опять только вертикальную реакцию. По горизонтали балка уехала бы так же."),
+            ),
+            Opt(
+                L("nic – jen je moc lehký", "ничего — она просто слишком лёгкая"),
+                why = L("Těžší nosník by se rozjížděl pomaleji, ale rozjel by se taky – žádná síla mu nebrání.", "Более тяжёлая балка разгонялась бы медленнее, но всё равно поехала бы — ей ничто не мешает."),
+            ),
+        ),
+        explain = L(
+            "n = r je **nutná** podmínka, ne postačující. Podpory musí navíc zabránit každému pohybu: posunu vodorovně, svisle i otočení. Tři posuvné podpory mají tři neznámé, a přesto je nosník pohyblivý – takové uložení je **výjimkové**.",
+            "n = r — условие **необходимое**, но не достаточное. Опоры должны ещё не допускать никакого движения: ни горизонтального, ни вертикального сдвига, ни поворота. У трёх подвижных опор три неизвестные, и всё же балка подвижна — такое закрепление **геометрически изменяемо**.",
+        ),
+    )
     fun run() {
         if (running) return
         running = true
@@ -536,44 +632,28 @@ private fun CardScope.EnoughButHolds() {
         if (x > 2) text(200.0, y2 + 52, t.pick(L("posuvné podpory vodorovně nedrží → zrychluje", "подвижные опоры не держат по горизонтали → разгоняется")), c.derived, 12.0)
     }
     CardText(L(
-        "Oba nosníky mají **3** neznámé reakce, stejně jako jsou 3 rovnice rovnováhy: n = r. Do obou krátce strčíme vodorovnou silou H. Který z nich ji udrží?",
-        "У обеих балок **3** неизвестные реакции — столько же, сколько уравнений равновесия: n = r. Обе коротко толкнём горизонтальной силой H. Какая из них её удержит?",
+        "Oba nosníky mají **3** neznámé reakce – stejně jako jsou 3 rovnice rovnováhy: n = r. Do obou krátce strčíme vodorovnou silou H.",
+        "У обеих балок **3** неизвестные реакции — столько же, сколько уравнений равновесия: n = r. Обе коротко толкнём горизонтальной силой H.",
     ))
-    Todo(
-        L("Odhadni, který nosník sílu H udrží", "Предскажи, какая балка удержит силу H") to (guess != null),
-        L("Strč do obou nosníků", "Толкни обе балки") to pushed,
-        L("Řekni, co dolnímu nosníku chybí", "Скажи, чего не хватает нижней балке") to (why == 0),
+    Steps(
+        tip9(
+            L("Tipni si: který nosník sílu H udrží?", "Как думаешь: какая балка удержит силу H?"),
+            listOf(L("oba – oba mají n = r", "обе — у обеих n = r"), L("jen horní", "только верхняя"), L("jen dolní", "только нижняя"), L("žádný", "ни одна")),
+            guess,
+        ) { guess = it },
+        Step(
+            L("Strč do obou nosníků vodorovnou silou H", "Толкни обе балки горизонтальной силой H"), pushed,
+            result = {
+                Note(if (guess == 1) Tone.OK else Tone.INFO, L(
+                    (if (guess == 1) "Tip sedí. " else "") + "Horní nosník drží – pevná podpora A má vodorovnou reakci. Dolní se rozjel: posuvné podpory umějí tlačit jen svisle, takže vodorovné síle nic nebrání, a bez tření jede dál.",
+                    (if (guess == 1) "Прогноз верен. " else "") + "Верхняя балка держится — у неподвижной опоры A есть горизонтальная реакция. Нижняя разогналась: подвижные опоры давят только вертикально, горизонтальной силе ничто не мешает, и без трения балка едет дальше.",
+                ))
+            },
+        ) {
+            ActionButton(L("Strč silou H", "Толкнуть силой H"), enabled = !running) { run() }
+        },
+        qWhy.step9(),
     )
-    Chips(
-        listOf(L("oba – oba mají n = r", "обе — у обеих n = r"), L("jen horní", "только верхняя"), L("jen dolní", "только нижняя"), L("žádný", "ни одна")),
-        guess,
-    ) { if (!pushed) guess = it }
-    ActionButton(L("Strč vodorovně silou H", "Толкнуть горизонтальной силой H"), enabled = guess != null && !running) { run() }
-    if (pushed) {
-        Note(if (guess == 1) Tone.OK else Tone.INFO, L(
-            (if (guess == 1) "Odhad sedí. " else "") + "Horní nosník drží – pevná podpora A má vodorovnou reakci. Dolní se rozjel: posuvné podpory umějí tlačit jen svisle, takže vodorovné síle nic nebrání, a bez tření jede dál.",
-            (if (guess == 1) "Предсказание верное. " else "") + "Верхняя балка держится — у неподвижной опоры A есть горизонтальная реакция. Нижняя разогналась: подвижные опоры давят только вертикально, горизонтальной силе ничто не мешает, и без трения балка едет дальше.",
-        ))
-        // vlastní volba místo Quiz: úkol je v rámečku od začátku, takže karta se neodemkne dřív, než žák odpoví
-        CardText(L("Co dolnímu nosníku chybí?", "Чего не хватает нижней балке?"))
-        Chips(
-            listOf(
-                L("vodorovná reakce – žádná podpora nebrání posunu", "горизонтальная реакция — ни одна опора не мешает сдвигу"),
-                L("další svislá podpora", "ещё одна вертикальная опора"),
-                L("nic – jen je moc lehký", "ничего — она просто слишком лёгкая"),
-            ),
-            why,
-        ) { if (why != 0) why = it }
-        when (why) {
-            0 -> Note(Tone.OK, L(
-                "n = r je **nutná** podmínka, ne postačující. Podpory musí navíc zabránit každému pohybu: posunu vodorovně, svisle i otočení. Tři posuvné podpory mají tři neznámé, a přesto je nosník pohyblivý – takové uložení je **výjimkové**.",
-                "n = r — условие **необходимое**, но не достаточное. Опоры должны ещё не допускать никакого движения: ни горизонтального, ни вертикального сдвига, ни поворота. У трёх подвижных опор три неизвестные, и всё же балка подвижна — такое закрепление **геометрически изменяемо**.",
-            ))
-            1 -> Note(Tone.NUDGE, L("Čtvrtá posuvná podpora by přidala zase jen svislou reakci. Vodorovně by nosník ujel stejně.", "Четвёртая подвижная опора добавила бы опять только вертикальную реакцию. По горизонтали балка уехала бы так же."))
-            2 -> Note(Tone.NUDGE, L("Těžší nosník by se rozjížděl pomaleji, ale rozjel by se taky – žádná síla mu nebrání.", "Более тяжёлая балка разгонялась бы медленнее, но всё равно поехала бы — ей ничто не мешает."))
-            else -> {}
-        }
-    }
 }
 
 internal fun lesson9() = Lesson(

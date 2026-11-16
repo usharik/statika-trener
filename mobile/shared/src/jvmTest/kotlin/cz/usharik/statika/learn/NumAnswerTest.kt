@@ -74,11 +74,11 @@ class NumAnswerTest {
             }
         }
         waitForIdle()
-        onNodeWithText("Nevím – ukaž postup").performClick()
+        onNodeWithText("Nevím").performClick()
         waitForIdle()
         onNodeWithText("Nápověda k úloze").assertExists()
         assertFalse(scope.done)
-        onNodeWithText("Ukaž celý postup").performClick()
+        onNodeWithText("Ukaž postup").performClick()
         waitForIdle()
         assertTrue(scope.done)
         onNodeWithText("Vysvětlení").assertExists()

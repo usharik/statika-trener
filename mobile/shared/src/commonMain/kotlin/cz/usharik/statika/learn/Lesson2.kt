@@ -48,7 +48,6 @@ private fun CardScope.TugOfWar() {
     val t = tr()
     var left by remember { mutableStateOf(3f) }
     var right by remember { mutableStateOf(5f) }
-    var touched by remember { mutableStateOf(false) }
     var reached by remember { mutableStateOf(false) }
     var sawRun by remember { mutableStateOf(false) }
     val res = right - left
@@ -63,10 +62,13 @@ private fun CardScope.TugOfWar() {
     // pokus: síly se nastaví u stojícího vozíku, „Pusť vozík“ ho pustí z klidu (žádný skrytý restart při posunu posuvníku)
     var runId by remember { mutableStateOf(0) }
     var running by remember { mutableStateOf(false) }
+    var lastRes by remember { mutableStateOf<Float?>(null) } // Σ F_x posledního puštění (ukáže se až po puštění)
+    var leftSet by remember { mutableStateOf(false) } // krok 2: levý tým přešel na 4,5 kN
     var stillRun by remember { mutableStateOf(false) } // poslední pokus byl vyrovnaný a vozík opravdu stál
     LaunchedEffect(runId) {
         if (runId == 0) return@LaunchedEffect
         val a = acc
+        lastRes = res
         running = true
         stillRun = false
         x = 0.0
@@ -137,7 +139,8 @@ private fun CardScope.TugOfWar() {
             force(cx, cy - 46, cx + v * 8, cy - 46, c.accent, width = 2.4, alpha = fade)
             text(cx + v * 4, cy - 56, "v = ${num(abs(v), 1)} m/s", c.accent, 12.0, alpha = fade)
         }
-        if (!balanced) {
+        val shown = running || ghosts.isNotEmpty()
+        if (shown && !balanced) {
             text(
                 200.0, floor + 34,
                 t.pick(
@@ -147,52 +150,96 @@ private fun CardScope.TugOfWar() {
                 c.derived, 13.0,
             )
             text(200.0, floor + 54, t.pick(L("čárky: kde byl vozík každou půlsekundu", "штрихи: где была тележка каждые полсекунды")), c.inkSoft, 11.0)
-        } else {
+        } else if (shown) {
             text(200.0, floor + 40, t.pick(if (stillRun) L("rovnováha – vozík pořád stojí", "равновесие — тележка всё ещё стоит") else L("síly jsou stejné", "силы одинаковые")), c.accent, 16.0, bold = true)
             if (stillRun) text(200.0, floor + 58, t.pick(L("všechny záblesky na jednom místě", "все вспышки в одном месте")), c.inkSoft, 11.0)
         }
     }
     CardText(L(
-        "Dva týmy táhnou vozík (2 t, kolečka bez tření) každý na svou stranu. Σ[[F_x]] čti „součet vodorovných sil“: doprava +, doleva −. Nastav síly, pak vozík **pusť z klidu** a sleduj záblesky – kde byl vozík každou půlsekundu.",
-        "Две команды тянут тележку (2 т, колёса без трения) каждая в свою сторону. Σ[[F_x]] — «сумма горизонтальных сил»: вправо +, влево −. Задай силы, потом **отпусти тележку из покоя** и следи за вспышками — где была тележка каждые полсекунды.",
+        "Dva týmy táhnou vozík (2 t, kolečka bez tření) každý na svou stranu. Záblesky ukazují, kde byl vozík každou půlsekundu. Σ[[F_x]] = součet vodorovných sil: doprava +, doleva −.",
+        "Две команды тянут тележку (2 т, колёса без трения) каждая в свою сторону. Вспышки показывают, где была тележка каждые полсекунды. Σ[[F_x]] — сумма горизонтальных сил: вправо +, влево −.",
     ))
-    Todo(
-        L("Pusť vozík s **nestejnými** silami a sleduj, jak se rozjíždí", "Отпусти тележку с **неравными** силами и посмотри, как она разгоняется") to sawRun,
-        L("Najdi síly, se kterými vozík po puštění zůstane **stát** (Σ[[F_x]] = 0)", "Подбери силы, при которых отпущенная тележка **останется стоять** (Σ[[F_x]] = 0)") to reached,
-    )
     fun fresh() {
         // nové nastavení = nový pokus: starý vozík i stopa zmizí, nový stojí na startu
         stillRun = false
+        lastRes = null
         x = 0.0
         v = 0.0
         ghosts.clear()
         fade = 1f
     }
-    ValueSlider(t.pick(L("Levý tým [[F_1]] = ${num(left.toDouble(), 1)} kN", "Левая команда [[F_1]] = ${num(left.toDouble(), 1)} кН")), left, 1f..8f, steps = 13) {
-        if (!running) {
-            left = it
-            touched = true
+    // krok 2: po prvním pokusu (až dojede a objeví se nový vozík) táhne levý tým 4,5 kN
+    LaunchedEffect(sawRun, running) {
+        if (sawRun && !running && !leftSet) {
+            delay(400)
+            left = 4.5f
+            leftSet = true
             fresh()
         }
     }
-    ValueSlider(t.pick(L("Pravý tým [[F_2]] = ${num(right.toDouble(), 1)} kN", "Правая команда [[F_2]] = ${num(right.toDouble(), 1)} кН")), right, 1f..8f, steps = 13) {
-        if (!running) {
-            right = it
-            touched = true
-            fresh()
+    val sumLine: @Composable () -> Unit = {
+        lastRes?.let { r ->
+            if (abs(r) < 0.01f) Readout("Σ[[F_x]] = ${num(right.toDouble(), 1)} − ${num(left.toDouble(), 1)} = 0", ok = true)
+            else Readout("Σ[[F_x]] = ${num(right.toDouble(), 1)} − ${num(left.toDouble(), 1)} = ${num(r.toDouble(), 1)} kN → a = ${num(abs(r / mass), 2)} m/s²")
         }
     }
-    ActionButton(L("Pusť vozík", "Отпустить тележку"), enabled = !running) { runId++ }
-    if (balanced) Readout("Σ[[F_x]] = ${num(right.toDouble(), 1)} − ${num(left.toDouble(), 1)} = 0", ok = true)
-    else Readout("Σ[[F_x]] = ${num(right.toDouble(), 1)} − ${num(left.toDouble(), 1)} = ${num(res.toDouble(), 1)} kN → a = ${num(abs(acc).toDouble(), 2)} m/s²")
-    if (!balanced) SmallText(L(
-        "Zrychlení a = Σ[[F]] / m: převaha 2 kN rozjíždí dvoutunový vozík o 1 m/s každou sekundu. Proto jsou čárky čím dál dál od sebe.",
-        "Ускорение a = Σ[[F]] / m: перевес 2 кН разгоняет двухтонную тележку на 1 м/с каждую секунду. Поэтому штрихи всё дальше друг от друга.",
-    ))
-    if (balanced && reached) SmallText(L(
-        "Tomu se říká **rovnováha**: síly působí dál, jen se navzájem vyruší. Rovnováha ≠ žádné síly.",
-        "Это и есть **равновесие**: силы по-прежнему действуют, просто уравновешивают друг друга. Равновесие ≠ отсутствие сил.",
-    ))
+    val release: @Composable () -> Unit = { ActionButton(L("Pusť vozík", "Отпустить тележку"), enabled = !running) { runId++ } }
+    val rightSlider: @Composable () -> Unit = {
+        ValueSlider(t.pick(L("Pravý tým [[F_2]] = ${num(right.toDouble(), 1)} kN", "Правая команда [[F_2]] = ${num(right.toDouble(), 1)} кН")), right, 1f..8f, steps = 13) {
+            if (!running) {
+                right = it
+                fresh()
+            }
+        }
+    }
+    Steps(
+        Step(
+            L("Pusť vozík: vpravo táhne 5 kN, vlevo 3 kN", "Отпусти тележку: вправо тянут 5 кН, влево — 3 кН"), sawRun,
+            result = {
+                SmallText(L(
+                    "Zrychlení a = Σ[[F]] / m: převaha 5 − 3 = 2 kN rozjíždí dvoutunový vozík o 2 / 2 = 1 m/s každou sekundu. Proto jsou čárky čím dál dál od sebe.",
+                    "Ускорение a = Σ[[F]] / m: перевес 5 − 3 = 2 кН разгоняет двухтонную тележку на 2 / 2 = 1 м/с каждую секунду. Поэтому штрихи всё дальше друг от друга.",
+                ))
+            },
+        ) {
+            sumLine()
+            release()
+        },
+        Step(L("Vlevo táhne 4,5 kN. Nastav pravý tým tak, aby vozík zůstal stát", "Слева тянут 4,5 кН. Подбери силу правой команды, чтобы тележка стояла"), reached) {
+            rightSlider()
+            sumLine()
+            release()
+            lastRes?.let { r ->
+                if (!running && abs(r) >= 0.01f) SmallText(
+                    if (r > 0) L("Převaha doprava – vozík se rozjel doprava. Zmenši [[F_2]].", "Перевес вправо — тележка поехала вправо. Уменьши [[F_2]].")
+                    else L("Převaha doleva – vozík se rozjel doleva. Zvětši [[F_2]].", "Перевес влево — тележка поехала влево. Увеличь [[F_2]]."),
+                )
+            }
+        },
+        quizStep(
+            question = L("Vozík stojí. Působí na něj teď nějaké síly?", "Тележка стоит. Действуют ли на неё сейчас какие-то силы?"),
+            options = listOf(
+                Opt(L("ne, žádné", "нет, никаких"), why = L("Podívej se na lana – oba týmy pořád táhnou silou 4,5 kN.", "Посмотри на верёвки — обе команды по-прежнему тянут с силой 4,5 кН.")),
+                Opt(L("ano, dvě stejně velké proti sobě", "да, две равные навстречу"), correct = true),
+                Opt(L("jen ta větší", "только бóльшая"), why = L("Žádná není větší – obě mají 4,5 kN. Kdyby jedna převažovala, vozík by se rozjel.", "Ни одна не больше — обе по 4,5 кН. Если бы одна перевешивала, тележка бы поехала.")),
+            ),
+            explain = L(
+                "Tomu se říká **rovnováha**: síly působí dál, jen se navzájem vyruší. Rovnováha ≠ žádné síly.",
+                "Это и есть **равновесие**: силы по-прежнему действуют, просто уравновешивают друг друга. Равновесие ≠ отсутствие сил.",
+            ),
+        ),
+        after = {
+            ValueSlider(t.pick(L("Levý tým [[F_1]] = ${num(left.toDouble(), 1)} kN", "Левая команда [[F_1]] = ${num(left.toDouble(), 1)} кН")), left, 1f..8f, steps = 13) {
+                if (!running) {
+                    left = it
+                    fresh()
+                }
+            }
+            rightSlider()
+            sumLine()
+            release()
+        },
+    )
 }
 
 /**
@@ -277,37 +324,45 @@ private fun CardScope.Coast() {
         }
     }
     CardText(L(
-        "Vozík (1 t) stojí na hladkém ledě (tření zanedbáme). Síla 2 kN ho 1,5 sekundy rozjíždí a pak přestane působit. Co bude vozík dělat potom? Čárky ukazují, kde byl každou čtvrtsekundu.",
-        "Тележка (1 т) стоит на гладком льду (трением пренебрегаем). Сила 2 кН разгоняет её 1,5 секунды и потом перестаёт действовать. Что будет делать тележка дальше? Штрихи показывают, где она была каждую четверть секунды.",
+        "Vozík (1 t) stojí na hladkém ledě, tření zanedbáme. Síla 2 kN ho 1,5 s rozjíždí a pak přestane působit. Čárky ukazují, kde byl každou čtvrtsekundu.",
+        "Тележка (1 т) стоит на гладком льду, трением пренебрегаем. Сила 2 кН разгоняет её 1,5 с и перестаёт действовать. Штрихи показывают, где она была каждую четверть секунды.",
     ))
-    Todo(
-        L("Tipni si, co vozík udělá, až síla přestane působit", "Предположи, что будет делать тележка, когда сила перестанет действовать") to (guess != null),
-        L("Spusť pokus a sleduj čárky pod vozíkem", "Запусти опыт и следи за штрихами под тележкой") to ran,
+    val options = listOf(
+        L("postupně se zastaví", "постепенно остановится"),
+        L("pojede dál stejně rychle", "поедет дальше с той же скоростью"),
+        L("bude dál zrychlovat", "будет и дальше разгоняться"),
     )
-    Chips(
-        listOf(
-            L("postupně se zastaví", "постепенно остановится"),
-            L("pojede dál stejně rychle", "поедет дальше с той же скоростью"),
-            L("bude dál zrychlovat", "будет и дальше разгоняться"),
-        ),
-        guess,
-    ) { if (!running && !ran) guess = it }
-    ActionButton(L("Spusť pokus", "Запустить опыт"), enabled = !running && guess != null) { start() }
-    if (ran) {
-        val g = guess ?: 1
-        Note(if (g == 1) Tone.OK else Tone.INFO, L(
-            when (g) {
-                1 -> "Správně – zelené čárky jsou stejně daleko od sebe: rychlost se nemění."
-                0 -> "Nezastavil se. Zastavit by ho musela síla proti pohybu – tření nebo brzda. Tady žádná není, zelené čárky jsou stejně daleko od sebe."
-                else -> "Nezrychluje. Zrychlovat ho může jen nevyrovnaná síla – a ta zmizela. Zelené čárky jsou stejně daleko od sebe."
-            } + " Když je Σ[[F]] = 0, rychlost se **nemění**: těleso stojí, nebo jede rovnoměrně přímočaře (1. Newtonův zákon). Statika řeší ten klidný případ: všechno stojí a Σ[[F]] = 0.",
-            when (g) {
-                1 -> "Верно — зелёные штрихи на равных расстояниях: скорость не меняется."
-                0 -> "Не остановилась. Чтобы её остановить, нужна сила против движения — трение или тормоз. Здесь её нет, зелёные штрихи на равных расстояниях."
-                else -> "Не разгоняется. Разгонять её может только неуравновешенная сила — а она исчезла. Зелёные штрихи на равных расстояниях."
-            } + " Когда Σ[[F]] = 0, скорость **не меняется**: тело стоит или движется равномерно и прямолинейно (1-й закон Ньютона). Статика изучает спокойный случай: всё стоит и Σ[[F]] = 0.",
-        ))
-    }
+    Steps(
+        Step(
+            L("Tipni si: co vozík udělá, až síla přestane působit?", "Как думаешь: что сделает тележка, когда сила перестанет действовать?"), guess != null,
+            result = { guess?.let { SmallText(L("Tvůj tip: **${options[it].cs}**", "Твой прогноз: **${options[it].ru}**")) } },
+        ) {
+            Chips(options, guess) { if (guess == null) guess = it }
+        },
+        Step(
+            L("Spusť pokus a sleduj rozestupy čárek po 1,5 s", "Запусти опыт и следи за расстоянием между штрихами после 1,5 с"), ran,
+            result = {
+                val g = guess ?: 1
+                Note(if (g == 1) Tone.OK else Tone.INFO, L(
+                    when (g) {
+                        1 -> "Správně – zelené čárky jsou stejně daleko od sebe: rychlost se nemění."
+                        0 -> "Nezastavil se. Zastavit by ho musela síla proti pohybu – tření nebo brzda. Tady žádná není, zelené čárky jsou stejně daleko od sebe."
+                        else -> "Nezrychluje. Zrychlovat ho může jen nevyrovnaná síla – a ta zmizela. Zelené čárky jsou stejně daleko od sebe."
+                    } + " Když je Σ[[F]] = 0, rychlost se **nemění**: těleso stojí, nebo jede rovnoměrně přímočaře (1. Newtonův zákon). Statika řeší ten klidný případ: všechno stojí a Σ[[F]] = 0.",
+                    when (g) {
+                        1 -> "Верно — зелёные штрихи на равных расстояниях: скорость не меняется."
+                        0 -> "Не остановилась. Чтобы её остановить, нужна сила против движения — трение или тормоз. Здесь её нет, зелёные штрихи на равных расстояниях."
+                        else -> "Не разгоняется. Разгонять её может только неуравновешенная сила — а она исчезла. Зелёные штрихи на равных расстояниях."
+                    } + " Когда Σ[[F]] = 0, скорость **не меняется**: тело стоит или движется равномерно и прямолинейно (1-й закон Ньютона). Статика изучает спокойный случай: всё стоит и Σ[[F]] = 0.",
+                ))
+            },
+        ) {
+            ActionButton(L("Spusť pokus", "Запустить опыт"), enabled = !running) { start() }
+        },
+        after = {
+            ActionButton(L("Přehrát znovu", "Повторить"), enabled = !running) { start() }
+        },
+    )
 }
 
 /**
@@ -339,23 +394,24 @@ private fun CardScope.TableForce() {
         force(200.0, top + 8 * k, 200.0, top, c.react, width = 2.6)
         text(210.0, top + 4 * k + 10, if (solved) " = 8 kN" else " = ?", c.react, 14.0, Anchor.START, sym = "N")
     }
-    Quiz(
-        question = L(
-            "Bedna (tíha [[G]] = 5 kN) leží na stole a ruka ji shora přitlačuje silou [[P]] = 3 kN. Bedna stojí. Jak velkou silou [[N]] tlačí stůl bednu nahoru?",
-            "Ящик (сила тяжести [[G]] = 5 кН) лежит на столе, и рука прижимает его сверху силой [[P]] = 3 кН. Ящик стоит. С какой силой [[N]] стол давит на ящик вверх?",
-        ),
-        options = listOf(
-            Opt(L("5 kN", "5 кН"), why = L("To je jen tíha. Ruka ale tlačí bednu dolů taky – stůl se prohne víc a víc tlačí.", "Это только сила тяжести. Но рука тоже давит ящик вниз — стол прогнётся сильнее и будет давить сильнее.")),
-            Opt(L("8 kN", "8 кН"), correct = true),
-            Opt(L("2 kN", "2 кН"), why = L("Ruka tlačí dolů, ne nahoru – síly dolů se sčítají.", "Рука давит вниз, а не вверх — силы вниз складываются.")),
-            Opt(L("3 kN", "3 кН"), why = L("Stůl nese i tíhu bedny, nejen ruku.", "Стол держит и вес ящика, а не только руку.")),
-        ),
+    CardText(L(
+        "Bedna (tíha [[G]] = 5 kN) leží na stole a ruka ji shora přitlačuje silou [[P]] = 3 kN. Bedna stojí.",
+        "Ящик (сила тяжести [[G]] = 5 кН) лежит на столе, рука прижимает его сверху силой [[P]] = 3 кН. Ящик стоит.",
+    ))
+    Steps(numStep(
+        question = L("Jak velkou silou [[N]] tlačí stůl bednu nahoru?", "С какой силой [[N]] стол давит на ящик вверх?"),
+        fields = listOf(NumSpec(L("[[N]]", "[[N]]"), 8.0, t.pick(L("kN", "кН")))),
         explain = L(
             "Bedna stojí, takže Σ[[F_y]] = 0 (nahoru +): [[N]] − 5 − 3 = 0, tedy [[N]] = 8 kN. Síla stolu (podpory) **není automaticky rovna tíze** – je přesně taková, jakou vyžaduje rovnováha. Přesně tak budeme počítat reakce nosníků.",
             "Ящик стоит, значит Σ[[F_y]] = 0 (вверх +): [[N]] − 5 − 3 = 0, то есть [[N]] = 8 кН. Сила стола (опоры) **не обязательно равна весу** — она ровно такая, какую требует равновесие. Именно так мы будем считать реакции балок.",
         ),
-        columns = 2,
-    )
+        traps = listOf(
+            NumTrap.near(L("To je jen tíha. Ruka ale tlačí bednu dolů taky – stůl se prohne víc a víc tlačí.", "Это только сила тяжести. Но рука тоже давит ящик вниз — стол прогнётся сильнее и будет давить сильнее."), 5.0),
+            NumTrap.near(L("Ruka tlačí dolů, ne nahoru – síly dolů se sčítají.", "Рука давит вниз, а не вверх — силы вниз складываются."), 2.0),
+            NumTrap.near(L("Stůl nese i tíhu bedny, nejen ruku.", "Стол держит и вес ящика, а не только руку."), 3.0),
+        ),
+        nudge = L("Bedna stojí: síly nahoru = síly dolů. Které síly tlačí bednu dolů?", "Ящик стоит: силы вверх = силы вниз. Какие силы давят ящик вниз?"),
+    ))
 }
 
 /** Karta 3: vodorovně a svisle zvlášť – doplň chybějící sílu. */
@@ -382,8 +438,9 @@ private fun CardScope.TwoAxes() {
             text(cx - 70, cy - 12, "?", c.react, 24.0, bold = true)
         }
     }
-    Quiz(
-        question = L("Bedna má zůstat stát. Jaká síla chybí na místě otazníku?", "Ящик должен остаться на месте. Какой силы не хватает там, где стоит знак вопроса?"),
+    CardText(L("Bedna má zůstat stát. Jedna síla na obrázku chybí.", "Ящик должен остаться на месте. Одной силы на рисунке не хватает."))
+    Steps(quizStep(
+        question = L("Jaká síla patří na místo otazníku?", "Какая сила должна стоять на месте знака вопроса?"),
         options = listOf(
             Opt(L("4 kN ←", "4 кН ←"), correct = true),
             Opt(L("4 kN →", "4 кН →"), why = L("Pak by obě vodorovné síly táhly doprava. Na kterou stranu musí chybějící síla mířit, aby se vyrušily?", "Тогда обе горизонтальные силы тянули бы вправо. В какую сторону должна быть направлена недостающая сила, чтобы они уравновесились?")),
@@ -395,7 +452,7 @@ private fun CardScope.TwoAxes() {
             "По горизонтали и по вертикали считаем **отдельно**. Σ[[F_y]] = 3 − 3 = 0 уже выполняется; чтобы и Σ[[F_x]] = 4 − [[F_4]] = 0, нужна [[F_4]] = 4 кН влево.",
         ),
         columns = 2,
-    )
+    ))
 }
 
 /**
@@ -440,15 +497,16 @@ private fun CardScope.CheckStill() {
         force(200.0, ky - 30, 200.0, ky - 30 - 40, c.react, width = 2.6, alpha = alpha)
         text(208.0, ky - 52, if (solved) " = 8 kN" else " = ?", c.react, 13.0, Anchor.START, sym = "S", alpha = alpha)
         force(200.0, ky, 200.0, ky + 40, c.load, width = 2.6, alpha = alpha)
-        text(208.0, ky + 26, " = 8 kN", c.load, 13.0, Anchor.START, sym = "G", alpha = alpha)
+        text(208.0, ky + 46, " = 8 kN", c.load, 13.0, Anchor.START, sym = "G", alpha = alpha)
         force(282.0, ky + 15, 282.0, ky - 15, c.accent, width = 2.0, alpha = alpha)
         text(290.0, ky + 5, t.pick(L("v = stálá", "v = const")), c.accent, 12.0, Anchor.START, alpha = alpha)
     }
-    Quiz(
-        question = L(
-            "Výtah (tíha [[G]] = 8 kN) jede nahoru **stálou rychlostí** – záblesky jsou stejně daleko od sebe. Jak velkou silou [[S]] táhne lano?",
-            "Лифт (сила тяжести [[G]] = 8 кН) едет вверх с **постоянной скоростью** — вспышки на равных расстояниях. С какой силой [[S]] тянет трос?",
-        ),
+    CardText(L(
+        "Výtah (tíha [[G]] = 8 kN) jede nahoru **stálou rychlostí** – záblesky jsou stejně daleko od sebe.",
+        "Лифт (сила тяжести [[G]] = 8 кН) едет вверх с **постоянной скоростью** — вспышки на равных расстояниях.",
+    ))
+    Steps(quizStep(
+        question = L("Jak velkou silou [[S]] táhne lano?", "С какой силой [[S]] тянет трос?"),
         options = listOf(
             Opt(L("víc než 8 kN – jinak by nejel nahoru", "больше 8 кН — иначе он не ехал бы вверх"), why = L("Převaha síly by výtah **zrychlovala** – záblesky by se rozestupovaly. Jede ale stále stejně rychle.", "Перевес силы **разгонял** бы лифт — вспышки расходились бы. А он едет с постоянной скоростью.")),
             Opt(L("přesně 8 kN", "ровно 8 кН"), correct = true),
@@ -458,7 +516,7 @@ private fun CardScope.CheckStill() {
             "Stálá rychlost = rovnováha: Σ[[F_y]] = [[S]] − 8 = 0, tedy [[S]] = 8 kN. Síla je potřeba ke **změně** rychlosti, ne k samotnému pohybu. Rovnováha neznamená „žádné síly“ ani „nic se nehýbe“ – znamená, že se síly vyruší.",
             "Постоянная скорость = равновесие: Σ[[F_y]] = [[S]] − 8 = 0, то есть [[S]] = 8 кН. Сила нужна, чтобы **менять** скорость, а не чтобы просто двигаться. Равновесие не значит «нет сил» или «ничего не движется» — значит, что силы уравновешены.",
         ),
-    )
+    ))
 }
 
 internal fun lesson2() = Lesson(

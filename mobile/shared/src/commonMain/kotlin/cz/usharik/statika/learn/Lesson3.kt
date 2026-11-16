@@ -1,6 +1,11 @@
 package cz.usharik.statika.learn
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -92,6 +97,18 @@ internal fun PrimBuilder.inclined(tx: Double, ty: Double, alpha: Double, c: Stat
     }
 }
 
+/**
+ * Tip před pokusem: krok se splní jakoukoli volbou, správnost ukáže až následující pokus.
+ * Ve výkladu pak zůstane „Tvůj tip: …“.
+ */
+@Composable
+private fun tipStep(label: L, options: List<L>, pick: Int?, onPick: (Int) -> Unit): Step =
+    Step(label, pick != null, result = {
+        pick?.let { SmallText(L("Tvůj tip: **${options[it].cs}**", "Твой прогноз: **${options[it].ru}**")) }
+    }) {
+        Chips(options, pick) { if (pick == null) onPick(it) }
+    }
+
 /** Karta 3: posuvník úhlu – složky se mění živě. */
 @Composable
 private fun CardScope.AngleComponents() {
@@ -100,24 +117,57 @@ private fun CardScope.AngleComponents() {
     var dragging by remember { mutableStateOf(false) }
     var half by remember { mutableStateOf(false) }
     var equal by remember { mutableStateOf(false) }
+    var tipHalf by remember { mutableStateOf<Int?>(null) } // tip: 0 = 30°, 1 = 45°, 2 = 60°
+    var showing by remember { mutableStateOf(false) } // šipka se sama sklápí na 0° a zpět (potvrzení kvízu)
+    val zero = quizStep(
+        question = L("Síla leží podél nosníku (α = 0°). Která složka je nulová?", "Сила лежит вдоль балки (α = 0°). Какая составляющая равна нулю?"),
+        options = listOf(
+            Opt(L("[[F_y]] (svislá)", "[[F_y]] (вертикальная)"), correct = true),
+            Opt(L("[[F_x]] (vodorovná)", "[[F_x]] (горизонтальная)"), why = L("Síla podél nosníku míří vodorovně. Zbude jí něco, co tlačí dolů?", "Сила вдоль балки направлена горизонтально. Останется ли у неё что-то, что давит вниз?")),
+            Opt(L("žádná – obě jsou 5 kN", "никакая — обе по 5 кН"), why = L("Napůl se síla dělí jen při jednom úhlu, a ne při 0°. Co zbude ze svislé složky, když síla leží na nosníku?", "Пополам сила делится лишь при одном угле, и не при 0°. Что останется от вертикальной составляющей, если сила лежит на балке?")),
+        ),
+        explain = L(
+            "Při α = 0° je celá síla vodorovná: [[F_x]] = 10 kN, [[F_y]] = 0. Při α = 90° naopak [[F_x]] = 0.",
+            "При α = 0° вся сила горизонтальна: [[F_x]] = 10 кН, [[F_y]] = 0. При α = 90°, наоборот, [[F_x]] = 0.",
+        ),
+    )
+    // potvrzení: šipka se sklopí na 0° (F_y zmizí) a vrátí na 60°
+    LaunchedEffect(zero.done) {
+        if (!zero.done) return@LaunchedEffect
+        showing = true
+        delay(300)
+        for (a in 55 downTo 0 step 5) {
+            alpha = a.toDouble()
+            delay(45)
+        }
+        delay(1100)
+        for (a in 5..60 step 5) {
+            alpha = a.toDouble()
+            delay(45)
+        }
+        showing = false
+    }
     // cíl se počítá, až když na něm úhel chvíli zůstane – ne když posuvník přes něj jen přejede
-    LaunchedEffect(alpha) {
-        if (alpha == 30.0 || alpha == 45.0) {
+    LaunchedEffect(alpha, tipHalf, showing) {
+        if (showing || tipHalf == null) return@LaunchedEffect
+        if (alpha == 30.0 || (alpha == 45.0 && half)) {
             delay(500)
             if (alpha == 30.0) half = true
-            if (alpha == 45.0) equal = true
+            if (alpha == 45.0 && half) equal = true
         }
     }
     val tx = 310.0
     val ty = 196.0
+    val canTurn = zero.done && !showing
     fun setAlpha(v: Double) {
+        if (!canTurn) return
         alpha = ((v / 5).roundToInt() * 5.0).coerceIn(0.0, 90.0)
     }
     Stage(
         h = 240.0,
         description = t.pick(L("Šikmá síla a její složky", "Наклонная сила и её составляющие")),
         onDrag = { p, start ->
-            dragging = true
+            dragging = canTurn
             // úhel podle polohy prstu vůči působišti (konec šipky je vlevo nahoře)
             if (!start || p.y < ty) setAlpha(atan2(ty - p.y, tx - p.x) * 180 / PI)
         },
@@ -128,51 +178,53 @@ private fun CardScope.AngleComponents() {
         val a = alpha * PI / 180
         // ručka kousek za koncem šipky, aby nezakryla popisek ani šipku
         val len = F_KN * SCALE + 16
-        handle(tx - len * cos(a), ty - len * sin(a), c, dragging)
+        if (canTurn) handle(tx - len * cos(a), ty - len * sin(a), c, dragging)
     }
     CardText(L(
-        "Složky šikmé síly spočítáš z úhlu α mezi silou a nosníkem. Síla má pořád 10 kN – měň jen α (tahem za kroužek nebo posuvníkem) a čti, jak se mezi složky „rozdělí“.",
-        "Составляющие наклонной силы найдёшь по углу α между силой и балкой. Сила всё время 10 кН — меняй только α (кружком или ползунком) и смотри, как она «делится» между составляющими.",
+        "Složky šikmé síly určuje úhel α mezi silou a nosníkem. Síla má pořád 10 kN – mění se jen to, jak se mezi složky „rozdělí“.",
+        "Составляющие наклонной силы определяет угол α между силой и балкой. Сила всё время 10 кН — меняется только то, как она «делится» между составляющими.",
     ))
-    Quiz(
-        question = L("Předpověz: síla leží přesně podél nosníku (α = 0°). Která složka je nulová?", "Предскажи: сила лежит точно вдоль балки (α = 0°). Какая составляющая равна нулю?"),
-        options = listOf(
-            Opt(L("[[F_y]] (svislá)", "[[F_y]] (вертикальная)"), correct = true),
-            Opt(L("[[F_x]] (vodorovná)", "[[F_x]] (горизонтальная)"), why = L("Síla podél nosníku míří vodorovně. Zbude jí něco, co tlačí dolů? Nastav α = 0° a podívej se.", "Сила вдоль балки направлена горизонтально. Останется ли у неё что-то, что давит вниз? Поставь α = 0° и посмотри.")),
-            Opt(L("žádná – obě jsou 5 kN", "никакая — обе по 5 кН"), why = L("Napůl se síla dělí jen při jednom úhlu, a ne při 0°. Zkus α = 0° na posuvníku.", "Пополам сила делится лишь при одном угле, и не при 0°. Попробуй α = 0° на ползунке.")),
-        ),
-        explain = L(
-            "Při α = 0° je celá síla vodorovná: [[F_x]] = 10 kN, [[F_y]] = 0. Při α = 90° naopak [[F_x]] = 0.",
-            "При α = 0° вся сила горизонтальна: [[F_x]] = 10 кН, [[F_y]] = 0. При α = 90°, наоборот, [[F_x]] = 0.",
-        ),
-        columns = 3,
+    val turn: @Composable () -> Unit = {
+        ValueSlider("α = ${alpha.roundToInt()}°", alpha.toFloat(), 0f..90f, steps = 17) { setAlpha(it.toDouble()) }
+        val a = alpha * PI / 180
+        Readout(
+            "[[F_x]] = 10 · cos ${alpha.roundToInt()}° = ${num(F_KN * cos(a))} kN\n[[F_y]] = 10 · sin ${alpha.roundToInt()}° = ${num(F_KN * sin(a))} kN",
+        )
+    }
+    val tips = listOf(L("30°", "30°"), L("45°", "45°"), L("60°", "60°"))
+    Steps(
+        zero,
+        tipStep(
+            L("Tipni si: při jakém úhlu je [[F_y]] přesně polovina síly?", "Как думаешь: при каком угле [[F_y]] равна ровно половине силы?"),
+            tips, tipHalf,
+        ) { tipHalf = it },
+        Step(
+            L("Najdi úhel, při kterém je [[F_y]] = 5 kN", "Найди угол, при котором [[F_y]] = 5 кН"), half,
+            result = {
+                if (tipHalf == 0) Note(Tone.OK, L("Tip sedí: sin 30° = 0,5, takže [[F_y]] = 10 · 0,5 = 5 kN.", "Прогноз верный: sin 30° = 0,5, значит [[F_y]] = 10 · 0,5 = 5 кН."))
+                else Note(Tone.INFO, L(
+                    "Polovina síly není při ${tips[tipHalf ?: 1].cs}, ale při 30°: sin 30° = 0,5.",
+                    "Половина силы — не при ${tips[tipHalf ?: 1].ru}, а при 30°: sin 30° = 0,5.",
+                ))
+            },
+        ) { turn() },
+        Step(
+            L("Najdi úhel, při kterém jsou obě složky stejně velké", "Найди угол, при котором обе составляющие равны"), equal,
+            result = {
+                SmallText(L(
+                    "Při 45° jsou složky stejné: 7,07 + 7,07 = 14,1 kN – víc než 10! Složky se nesčítají jako čísla, ale jako šipky (7,07² + 7,07² = 10²).",
+                    "При 45° составляющие равны: 7,07 + 7,07 = 14,1 кН — больше 10! Составляющие складываются не как числа, а как стрелки (7,07² + 7,07² = 10²).",
+                ))
+            },
+        ) { turn() },
+        after = { turn() },
     )
-    Todo(
-        L("Najdi úhel, při kterém je svislá složka [[F_y]] = 5 kN – přesně polovina síly", "Найди угол, при котором вертикальная составляющая [[F_y]] = 5 кН — ровно половина силы") to half,
-        L("Najdi úhel, při kterém jsou obě složky stejně velké, [[F_x]] = [[F_y]]", "Найди угол, при котором обе составляющие равны, [[F_x]] = [[F_y]]") to equal,
-    )
-    ValueSlider("α = ${alpha.roundToInt()}°", alpha.toFloat(), 0f..90f, steps = 17) { setAlpha(it.toDouble()) }
-    val a = alpha * PI / 180
-    Readout("[[F_x]] = 10 · cos ${alpha.roundToInt()}° = ${num(F_KN * cos(a))} kN")
-    Readout("[[F_y]] = 10 · sin ${alpha.roundToInt()}° = ${num(F_KN * sin(a))} kN")
-    if (alpha == 0.0) SmallText(L(
-        "Při α = 0° je celá síla vodorovná: [[F_x]] = [[F]], svislá složka [[F_y]] = 0.",
-        "При α = 0° вся сила горизонтальна: [[F_x]] = [[F]], вертикальная составляющая [[F_y]] = 0.",
-    ))
-    if (alpha == 90.0) SmallText(L(
-        "Při α = 90° je celá síla svislá: [[F_y]] = [[F]], vodorovná složka [[F_x]] = 0.",
-        "При α = 90° вся сила вертикальна: [[F_y]] = [[F]], горизонтальная составляющая [[F_x]] = 0.",
-    ))
-    if (alpha == 45.0) SmallText(L(
-        "Při 45° jsou složky stejné: 7,07 + 7,07 = 14,1 kN – víc než 10! Složky se nesčítají jako čísla, ale jako šipky (7,07² + 7,07² = 10²).",
-        "При 45° составляющие равны: 7,07 + 7,07 = 14,1 кН — больше 10! Составляющие складываются не как числа, а как стрелки (7,07² + 7,07² = 10²).",
-    ))
     SmallText(L(
         "Pomůcka: složka **u úhlu** = [[F]] · cos α, složka **naproti** úhlu = [[F]] · sin α. Tady α měříme od vodorovné, proto je u úhlu [[F_x]].",
         "Подсказка: составляющая, **прилежащая к углу**, = [[F]] · cos α, **противолежащая** = [[F]] · sin α. Здесь α отсчитываем от горизонтали, поэтому к углу прилежит [[F_x]].",
     ))
     // nepovinný odkaz – odkud se sin a cos berou (kurz trigonometrie); kartu neodemyká ani nezamyká
-    LearnJump(102, 0, L("📖 Proč zrovna cos a sin? → Trigonometrie: Sinus, kosinus, tangens", "📖 Почему именно cos и sin? → Тригонометрия: синус, косинус, тангенс"))
+    LearnJump(102, 0, L("Proč zrovna cos a sin? → Trigonometrie: Sinus, kosinus, tangens", "Почему именно cos и sin? → Тригонометрия: синус, косинус, тангенс"))
 }
 
 /** Sáně shora: korba, dvě lyžiny přečnívající dopředu (doprava). */
@@ -225,7 +277,22 @@ private fun CardScope.TwoRopes() {
     var stoodStill by remember { mutableStateOf(false) }
     val trail = remember { mutableStateListOf<Pair<Double, Double>>() }
     val scope = rememberCoroutineScope()
-    val use3 = ran
+    var lastLeft by remember { mutableStateOf<Double?>(null) } // Σ F posledního pokusu se třetím lanem (až po puštění)
+    val rq = quizStep(
+        question = L("Jak velká je výslednice [[R]], která sáně rozjíždí?", "Чему равна равнодействующая [[R]], которая разгоняет санки?"),
+        options = listOf(
+            Opt(L("700 N", "700 Н"), why = L("400 + 300 by platilo, kdyby obě lana táhla stejným směrem. Míří ale jinam – změř fialovou úhlopříčku.", "400 + 300 было бы, если бы обе верёвки тянули в одну сторону. Но они направлены по-разному — оцени фиолетовую диагональ.")),
+            Opt(L("500 N", "500 Н"), correct = true),
+            Opt(L("100 N", "100 Н"), why = L("Odečítat by se síly mohly, jen kdyby táhly proti sobě. Tady svírají pravý úhel.", "Вычитать силы можно, только если они тянут навстречу друг другу. Здесь они под прямым углом.")),
+        ),
+        explain = L(
+            "Síly se sčítají jako **šipky**, ne jako čísla: šipky dáš za sebe (nebo doplníš rovnoběžník) a výslednice je úhlopříčka. Tady pravoúhlý trojúhelník 3-4-5: √(400² + 300²) = 500 N.",
+            "Силы складываются как **стрелки**, а не как числа: стрелки ставишь одну за другой (или достраиваешь параллелограмм), равнодействующая — диагональ. Здесь прямоугольный треугольник 3-4-5: √(400² + 300²) = 500 Н.",
+        ),
+        columns = 3,
+    )
+    // třetí lano přijde až po otázce na výslednici – její velikost je k němu klíčem
+    val use3 = rq.done
     fun net(): Pair<Double, Double> {
         var x = f1x + f2x
         var y = f1y + f2y
@@ -242,6 +309,7 @@ private fun CardScope.TwoRopes() {
         trail.clear()
         val (nx, ny) = net()
         val withThird = use3
+        lastLeft = if (withThird) hypot(nx, ny) else null
         scope.launch {
             val ax = nx / SLED_KG
             val ay = ny / SLED_KG
@@ -297,6 +365,7 @@ private fun CardScope.TwoRopes() {
             if (dragging && p.dist(sx0, sy0) > 20) {
                 a3 = snapAngle(atan2(p.y - sy0, p.x - sx0) * 180 / PI, exact)
                 f3 = ((hypot(p.x - sx0, p.y - sy0) / ROPE_K / 50).roundToInt() * 50.0).coerceIn(50.0, 700.0)
+                lastLeft = null
             }
         },
         onDragEnd = { dragging = false },
@@ -314,7 +383,7 @@ private fun CardScope.TwoRopes() {
             line(ox + f1x * ROPE_K, oy + f1y * ROPE_K, rx, ry, c.derived, 1.0, dash = true, alpha = 0.7f)
             line(ox + f2x * ROPE_K, oy + f2y * ROPE_K, rx, ry, c.derived, 1.0, dash = true, alpha = 0.7f)
             force(ox, oy, rx, ry, c.derived, 2.6, alpha = alpha)
-            text(rx + 6, ry - 6, " = 500 N", c.derived, 13.0, Anchor.START, sym = "R", alpha = alpha)
+            text(rx + 6, ry - 6, if (use3) " = 500 N" else " = ?", c.derived, 13.0, Anchor.START, sym = "R", alpha = alpha)
         }
         if (showForces) {
             force(ox + 24, oy, ox + f1x * ROPE_K, oy + f1y * ROPE_K, c.load, 3.0, alpha = alpha)
@@ -334,69 +403,65 @@ private fun CardScope.TwoRopes() {
         if (stoodStill) text(200.0, 30.0, t.pick(L("Σ F = 0 – sáně stojí", "Σ F = 0 — санки стоят")), c.accent, 15.0, bold = true)
     }
     CardText(L(
-        "Sáně (250 kg) na hladkém ledě, pohled shora. Jedno lano táhne silou 400 N doprava, druhé 300 N nahoru. Kam se sáně rozjedou? Nejdřív si tipni, pak je pusť.",
-        "Санки (250 кг) на гладком льду, вид сверху. Одна верёвка тянет с силой 400 Н вправо, другая — 300 Н вверх. Куда поедут санки? Сначала предскажи, потом отпусти их.",
+        "Sáně (250 kg) na hladkém ledě, pohled shora. Jedno lano táhne silou 400 N doprava, druhé 300 N nahoru.",
+        "Санки (250 кг) на гладком льду, вид сверху. Одна верёвка тянет с силой 400 Н вправо, другая — 300 Н вверх.",
     ))
-    Todo(
-        L("Tipni si směr a pusť sáně", "Предскажи направление и отпусти санки") to ran,
-        L("Přidej třetí lano [[F_3]] (modré, táhni za kroužek) tak, aby sáně po puštění **zůstaly stát**", "Добавь третью верёвку [[F_3]] (синюю, тяни за кружок) так, чтобы санки после отпускания **остались стоять**") to still,
-    )
-    if (!ran) {
-        SmallText(L("Můj tip – sáně pojedou:", "Мой прогноз — санки поедут:"))
-        Chips(
+    val releaseBtn: @Composable () -> Unit = { ActionButton(L("Pusť sáně", "Отпустить санки"), enabled = !running) { release() } }
+    Steps(
+        tipStep(
+            L("Tipni si: kam se sáně po puštění rozjedou?", "Как думаешь: куда поедут санки, если их отпустить?"),
             listOf(
                 L("→ doprava, za silnějším lanem", "→ вправо, за более сильной верёвкой"),
                 L("↗ šikmo mezi lany", "↗ наискосок, между верёвками"),
                 L("nikam – lana se přetahují", "никуда — верёвки перетягивают друг друга"),
             ),
             pred,
-        ) { pred = it }
-    }
-    ActionButton(L("Pusť sáně", "Отпустить санки"), enabled = !running && pred != null) { release() }
-    if (ran) {
-        when (pred) {
-            1 -> Note(Tone.OK, L(
-                "Správně: šikmo, po úhlopříčce rovnoběžníku ze dvou lan – a blíž k silnějšímu lanu.",
-                "Верно: наискосок, по диагонали параллелограмма из двух верёвок — и ближе к более сильной верёвке.",
-            ))
-            else -> Note(Tone.INFO, L(
-                "Sáně jely šikmo – po úhlopříčce rovnoběžníku, který tvoří obě síly. Každé lano „přidá“ svůj kus pohybu.",
-                "Санки поехали наискосок — по диагонали параллелограмма, который образуют обе силы. Каждая верёвка «добавляет» свою часть движения.",
-            ))
-        }
-        Quiz(
-            question = L("Jak velká je výsledná síla [[R]], která sáně rozjíždí?", "Чему равна равнодействующая [[R]], которая разгоняет санки?"),
-            options = listOf(
-                Opt(L("700 N", "700 Н"), why = L("400 + 300 by platilo, kdyby obě lana táhla stejným směrem. Míří ale jinam – změř fialovou úhlopříčku.", "400 + 300 было бы, если бы обе верёвки тянули в одну сторону. Но они направлены по-разному — оцени фиолетовую диагональ.")),
-                Opt(L("500 N", "500 Н"), correct = true),
-                Opt(L("100 N", "100 Н"), why = L("Odečítat by se síly mohly, jen kdyby táhly proti sobě. Tady svírají pravý úhel.", "Вычитать силы можно, только если они тянут навстречу друг другу. Здесь они под прямым углом.")),
-            ),
-            explain = L(
-                "Síly se sčítají jako **šipky**, ne jako čísla: šipky dáš za sebe (nebo doplníš rovnoběžník) a výslednice je úhlopříčka. Tady pravoúhlý trojúhelník 3-4-5: √(400² + 300²) = 500 N.",
-                "Силы складываются как **стрелки**, а не как числа: стрелки ставишь одну за другой (или достраиваешь параллелограмм), равнодействующая — диагональ. Здесь прямоугольный треугольник 3-4-5: √(400² + 300²) = 500 Н.",
-            ),
-            columns = 3,
-        )
-        val (nx, ny) = net()
-        val left = hypot(nx, ny)
-        Readout(
-            if (left < 1) "Σ[[F]] = 0 ✓" else L("Σ[[F]] = ${num(left, 0)} N – sáně se rozjedou", "Σ[[F]] = ${num(left, 0)} Н — санки поедут").t(),
-            ok = left < 1,
-        )
-        Chips(listOf(L("↺ 5°", "↺ 5°"), L("↻ 5°", "↻ 5°"), L("− 50 N", "− 50 Н"), L("+ 50 N", "+ 50 Н"))) { i ->
-            if (running) return@Chips
-            when (i) {
-                0 -> a3 = snapAngle(a3 - 5, exact)
-                1 -> a3 = snapAngle(a3 + 5, exact)
-                2 -> f3 = (f3 - 50).coerceAtLeast(50.0)
-                else -> f3 = (f3 + 50).coerceAtMost(700.0)
+        ) { pred = it },
+        Step(
+            L("Pusť sáně a sleduj jejich stopu", "Отпусти санки и следи за их следом"), ran,
+            result = {
+                if (pred == 1) Note(Tone.OK, L(
+                    "Správně: šikmo, po úhlopříčce rovnoběžníku ze dvou lan – a blíž k silnějšímu lanu.",
+                    "Верно: наискосок, по диагонали параллелограмма из двух верёвок — и ближе к более сильной верёвке.",
+                )) else Note(Tone.INFO, L(
+                    "Sáně jely šikmo – po úhlopříčce rovnoběžníku, který tvoří obě síly. Každé lano „přidá“ svůj kus pohybu.",
+                    "Санки поехали наискосок — по диагонали параллелограмма, который образуют обе силы. Каждая верёвка «добавляет» свою часть движения.",
+                ))
+            },
+        ) { releaseBtn() },
+        rq,
+        Step(
+            L("Přidej třetí lano [[F_3]] tak, aby sáně po puštění zůstaly stát", "Добавь третью верёвку [[F_3]] так, чтобы отпущенные санки остались на месте"), still,
+            result = {
+                Note(Tone.OK, L(
+                    "Třetí lano je stejně velké jako výslednice (500 N), na stejné přímce, ale opačného smyslu. Tři síly se vyrušily: Σ[[F]] = 0 – přesně tohle budeme hledat u nosníků.",
+                    "Третья верёвка равна равнодействующей (500 Н), лежит на той же прямой, но направлена в обратную сторону. Три силы уравновесились: Σ[[F]] = 0 — именно это мы будем искать у балок.",
+                ))
+            },
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Chips(listOf(L("↺ 5°", "↺ 5°"), L("↻ 5°", "↻ 5°")), modifier = Modifier.weight(1f)) { i ->
+                    if (!running) {
+                        a3 = snapAngle(a3 + if (i == 0) -5.0 else 5.0, exact)
+                        lastLeft = null
+                    }
+                }
+                Chips(listOf(L("− 50 N", "− 50 Н"), L("+ 50 N", "+ 50 Н")), modifier = Modifier.weight(1f)) { i ->
+                    if (!running) {
+                        f3 = (f3 + if (i == 0) -50.0 else 50.0).coerceIn(50.0, 700.0)
+                        lastLeft = null
+                    }
+                }
             }
-        }
-        if (still) Note(Tone.OK, L(
-            "Třetí lano je stejně velké jako výslednice (500 N), na stejné přímce, ale opačného smyslu. Tři síly se vyrušily: Σ[[F]] = 0 – přesně tohle budeme hledat u nosníků.",
-            "Третья верёвка равна равнодействующей (500 Н), лежит на той же прямой, но направлена в обратную сторону. Три силы уравновесились: Σ[[F]] = 0 — именно это мы будем искать у балок.",
-        ))
-    }
+            releaseBtn()
+            lastLeft?.let { left ->
+                if (left >= 1 && !running) SmallText(L(
+                    "Zbylo Σ[[F]] = ${num(left, 0)} N – sáně se rozjely. Kam musí [[F_3]] mířit a jak velká musí být, aby výslednici vyrušila?",
+                    "Осталось Σ[[F]] = ${num(left, 0)} Н — санки поехали. Куда должна быть направлена [[F_3]] и какой величины, чтобы уравновесить равнодействующую?",
+                ))
+            }
+        },
+    )
 }
 
 /** Bedna na vzduchovém polštáři: 0 = F, 1 = F_x + F_y, 2 = jen F_x, 3 = F + F_x + F_y (síly v kN, osa y dolů). */
@@ -423,6 +488,9 @@ private fun CardScope.ReplaceToggle() {
     var alpha by remember { mutableStateOf(1f) }
     val ends = remember { mutableStateMapOf<Int, Pair<Double, Double>>() }
     val scope = rememberCoroutineScope()
+    var tipSame by remember { mutableStateOf<Int?>(null) } // tip pro složky: 0 stejné místo, 1 dál, 2 jinam
+    // pokus, na který čeká aktuální krok (mezi pokusy obrázek ukazuje jeho síly)
+    val next = (0..3).firstOrNull { it !in ends } ?: 3
     fun posAt(m: Int, tt: Double): Pair<Double, Double> {
         val (fx, fy) = TRIALS[m]
         val s = if (tt < tau) 0.5 * tt * tt else 0.5 * tau * tau + tau * (tt - tau) // m na 1 m/s²
@@ -476,6 +544,7 @@ private fun CardScope.ReplaceToggle() {
         }
         ends[2]?.let { (ex, ey) -> text(ex, ey + 22, t.pick(L(" sama", " одна")), c.ink, 12.0, sym = "F_x") }
         ends[3]?.let { (ex, ey) -> text(ex - 10, ey + 4, t.pick(L("F + složky", "F + составляющие")), c.ink, 12.0, Anchor.END) }
+        val mode = if (running) mode else next
         val (bx, by) = if (running) posAt(mode, time) else x0 to y0
         rect(bx - 18, by - 14, 36.0, 28.0, c.beam, c.ink, 1.6, alpha)
         circle(bx, by, 2.5, c.ink, alpha = alpha)
@@ -505,21 +574,11 @@ private fun CardScope.ReplaceToggle() {
         text(20.0, 28.0, t.pick(L("pozorujeme vždy 2 s", "наблюдаем всегда 2 с")), c.inkSoft, 11.0, Anchor.START)
     }
     CardText(L(
-        "Šikmou sílu smíme nahradit dvěma **složkami** – vodorovnou [[F_x]] a svislou [[F_y]], které působí **ve stejném bodě**. Ověř to pokusem: bedna (2 t) se vznáší na vzduchovém polštáři, krátce do ní strčíš a sleduješ, kam za 2 s dojede.",
-        "Наклонную силу можно заменить двумя **составляющими** — горизонтальной [[F_x]] и вертикальной [[F_y]], приложенными **в той же точке**. Проверь опытом: ящик (2 т) парит на воздушной подушке, ты коротко толкаешь его и смотришь, куда он доедет за 2 с.",
+        "Šikmou sílu smíme nahradit dvěma **složkami** – vodorovnou [[F_x]] a svislou [[F_y]], které působí **ve stejném bodě**. Ověříme to pokusem: bedna (2 t) na vzduchovém polštáři dostane krátké strčení a my sledujeme, kam za 2 s dojede.",
+        "Наклонную силу можно заменить двумя **составляющими** — горизонтальной [[F_x]] и вертикальной [[F_y]], приложенными **в той же точке**. Проверим опытом: ящик (2 т) на воздушной подушке получает короткий толчок, а мы смотрим, куда он доедет за 2 с.",
     ))
-    Todo(
-        L("Strč silou [[F]] = 10 kN", "Толкни силой [[F]] = 10 кН") to (0 in ends),
-        L("Strč oběma složkami [[F_x]] a [[F_y]] najednou – kam bedna dojede?", "Толкни обеими составляющими [[F_x]] и [[F_y]] сразу — куда доедет ящик?") to (1 in ends),
-        L("Strč jen složkou [[F_x]]", "Толкни только составляющей [[F_x]]") to (2 in ends),
-    )
-    Chips(listOf(L("Strč: [[F]]", "Толкнуть: [[F]]"), L("Strč: [[F_x]] + [[F_y]]", "Толкнуть: [[F_x]] + [[F_y]]"), L("Strč: jen [[F_x]]", "Толкнуть: только [[F_x]]")), if (running && mode < 3) mode else null) { run(it) }
-    if (0 in ends && 1 in ends) SmallText(L(
-        "Stejné místo: složky dohromady dělají přesně totéž co celá síla. Jsou to odvěsny pravoúhlého trojúhelníku, síla je přepona: 8 a 6 kN z 10 kN.",
-        "То же место: составляющие вместе действуют точно так же, как вся сила. Это катеты прямоугольного треугольника, сила — гипотенуза: 8 и 6 кН из 10 кН.",
-    ))
-    Quiz(
-        question = L("Na výkresu zůstane síla [[F]] **i** její složky [[F_x]], [[F_y]]. Co se stane, když s nimi počítáš se všemi?", "На чертеже осталась сила [[F]] **и** её составляющие [[F_x]], [[F_y]]. Что будет, если считать со всеми тремя?"),
+    val twice = quizStep(
+        question = L("Na výkresu zůstane [[F]] i obě složky. Co se stane ve výpočtu?", "На чертеже остались [[F]] и обе составляющие. Что будет в расчёте?"),
         options = listOf(
             Opt(L("nic – složky jsou jen jiný zápis", "ничего — составляющие лишь другая запись"), why = L("Zápis to je – ale jen když sílu **nahradí**. Kolikrát pak započítáš 10 kN?", "Это запись — но только если они силу **заменяют**. Сколько раз тогда учтёшь 10 кН?")),
             Opt(L("sílu započítáš dvakrát – účinek bude dvojnásobný", "сила будет учтена дважды — действие удвоится"), correct = true),
@@ -530,7 +589,49 @@ private fun CardScope.ReplaceToggle() {
             "Составляющие силу **заменяют**, а не добавляются к ней. Нарисовал составляющие — зачеркни (или сотри) исходную стрелку, иначе учтёшь её дважды.",
         ),
     )
-    Chips(listOf(L("Ověř: strč [[F]] + [[F_x]] + [[F_y]]", "Проверь: толкни [[F]] + [[F_x]] + [[F_y]]")), if (running && mode == 3) 0 else null) { run(3) }
+    // po odpovědi se pokus F + F_x + F_y spustí sám – ukáže, co by udělal dvakrát započtený výkres
+    LaunchedEffect(twice.done) {
+        if (!twice.done || 3 in ends) return@LaunchedEffect
+        delay(700)
+        run(3)
+    }
+    Steps(
+        Step(L("Strč do bedny šikmou silou [[F]] = 10 kN", "Толкни ящик наклонной силой [[F]] = 10 кН"), 0 in ends) {
+            ActionButton(L("Strč silou F", "Толкнуть силой F"), enabled = !running) { run(0) }
+        },
+        tipStep(
+            L("Místo [[F]] strčíme složkami [[F_x]] a [[F_y]] najednou. Kam bedna dojede?", "Вместо [[F]] толкнём обеими составляющими сразу. Куда доедет ящик?"),
+            listOf(L("na stejné místo", "в то же место"), L("dál", "дальше"), L("jinam – jiným směrem", "в другую сторону")), tipSame,
+        ) { tipSame = it },
+        Step(
+            L("Strč oběma složkami a porovnej s první značkou", "Толкни обеими составляющими и сравни с первой меткой"), 1 in ends,
+            result = {
+                SmallText(L(
+                    (if (tipSame == 0) "Tip sedí. " else "") + "Stejné místo: složky dohromady dělají přesně totéž co celá síla. Jsou to odvěsny pravoúhlého trojúhelníku, síla je přepona: 8 a 6 kN z 10 kN.",
+                    (if (tipSame == 0) "Прогноз верный. " else "") + "То же место: составляющие вместе действуют точно так же, как вся сила. Это катеты прямоугольного треугольника, сила — гипотенуза: 8 и 6 кН из 10 кН.",
+                ))
+            },
+        ) { ActionButton(L("Strč oběma složkami", "Толкнуть составляющими"), enabled = !running) { run(1) } },
+        Step(
+            L("Strč jen složkou [[F_x]] – stačí jedna složka?", "Толкни только составляющей [[F_x]] — хватит ли одной?"), 2 in ends,
+            result = {
+                SmallText(L(
+                    "Jen [[F_x]] nestačí – bedna jede vodorovně a mine cíl. Sílu nahradí až **obě** složky.",
+                    "Одной [[F_x]] мало — ящик едет горизонтально и проходит мимо. Силу заменяют только **обе** составляющие.",
+                ))
+            },
+        ) { ActionButton(L("Strč jen vodorovnou", "Толкнуть только горизонтальной"), enabled = !running) { run(2) } },
+        twice,
+        Step(
+            L("Sleduj: [[F]] i složky najednou – bedna dojede dvakrát dál", "Смотри: [[F]] и составляющие вместе — ящик уедет вдвое дальше"), 3 in ends,
+            result = {
+                SmallText(L(
+                    "Dvakrát dál: s [[F]] i se složkami je ve výpočtu 20 kN místo 10 kN.",
+                    "Вдвое дальше: с [[F]] и составляющими в расчёте 20 кН вместо 10 кН.",
+                ))
+            },
+        ) { SmallText(L("Pokus [[F]] + [[F_x]] + [[F_y]] se spustí sám…", "Опыт [[F]] + [[F_x]] + [[F_y]] запустится сам…")) },
+    )
 }
 
 /** Karta 2: síla na čtverečkovaném papíře – trojúhelník 3-4-5 (složky ze stejného bodu jako síla). */
@@ -554,23 +655,21 @@ private fun CardScope.Grid345() {
         force(ox, oy, ox + 4 * s, oy - 3 * s, c.load, 3.0)
         text(ox + 2 * s + 12, oy - 1.5 * s - 14, " = 5", c.load, 15.0, Anchor.END, sym = "F")
     }
-    CardText(L(
-        "Šipka síly je dlouhá 5 dílků (dílek = strana čtverečku). Spočítej čtverečky: o kolik dílků míří doprava a o kolik nahoru?",
-        "Стрелка силы длиной 5 делений (деление = сторона клетки). Посчитай клетки: на сколько делений она уходит вправо и на сколько вверх?",
-    ))
-    Quiz(
-        question = L("Jak velké jsou složky [[F_x]] (vodorovná) a [[F_y]] (svislá)?", "Чему равны составляющие [[F_x]] (горизонтальная) и [[F_y]] (вертикальная)?"),
-        options = listOf(
-            Opt(L("[[F_x]] = 4, [[F_y]] = 3", "[[F_x]] = 4, [[F_y]] = 3"), correct = true),
-            Opt(L("[[F_x]] = 3, [[F_y]] = 4", "[[F_x]] = 3, [[F_y]] = 4"), why = L("[[F_x]] je **vodorovná** složka. Spočítej znovu: o kolik dílků míří šipka doprava?", "[[F_x]] — **горизонтальная** составляющая. Посчитай ещё раз: на сколько делений стрелка уходит вправо?")),
-            Opt(L("[[F_x]] = 5, [[F_y]] = 5", "[[F_x]] = 5, [[F_y]] = 5"), why = L("Může být složka stejně dlouhá jako celá šikmá šipka? Spočítej čtverečky pod ní a vedle ní.", "Может ли составляющая быть такой же длины, как вся наклонная стрелка? Посчитай клетки под ней и сбоку.")),
-        ),
+    CardText(L("Šipka síly je dlouhá 5 dílků (dílek = strana čtverečku).", "Стрелка силы длиной 5 делений (деление = сторона клетки)."))
+    Steps(numStep(
+        question = L("Spočítej čtverečky: kolik dílků má [[F_x]] a kolik [[F_y]]?", "Посчитай клетки: сколько делений у [[F_x]] и сколько у [[F_y]]?"),
+        fields = listOf(NumSpec(L("[[F_x]]", "[[F_x]]"), 4.0), NumSpec(L("[[F_y]]", "[[F_y]]"), 3.0)),
         explain = L(
             "4 dílky doprava a 3 nahoru. Pozor: 4 + 3 ≠ 5 – složky se silou tvoří pravoúhlý trojúhelník, platí 4² + 3² = 5².",
             "4 деления вправо и 3 вверх. Внимание: 4 + 3 ≠ 5 — составляющие и сила образуют прямоугольный треугольник: 4² + 3² = 5².",
         ),
-    )
-    if (done) LearnJump(105, 0, L("📖 Proč 4² + 3² = 5²? → Trigonometrie: Pythagorova věta", "📖 Почему 4² + 3² = 5²? → Тригонометрия: теорема Пифагора"))
+        traps = listOf(
+            NumTrap.near(L("[[F_x]] je **vodorovná** složka. Spočítej znovu: o kolik dílků míří šipka doprava?", "[[F_x]] — **горизонтальная** составляющая. Посчитай ещё раз: на сколько делений стрелка уходит вправо?"), 3.0, 4.0),
+            NumTrap(L("Může být složka stejně dlouhá jako celá šikmá šipka? Spočítej čtverečky pod ní a vedle ní.", "Может ли составляющая быть такой же длины, как вся наклонная стрелка? Посчитай клетки под ней и сбоку.")) { v -> v.any { it != null && abs(it) >= 5.0 } },
+        ),
+        nudge = L("Počítej strany čtverečků pod šipkou a vedle ní.", "Считай стороны клеток под стрелкой и сбоку от неё."),
+    ))
+    if (done) LearnJump(105, 0, L("Proč 4² + 3² = 5²? → Trigonometrie: Pythagorova věta", "Почему 4² + 3² = 5²? → Тригонометрия: теорема Пифагора"))
 }
 
 /** Karta 4: kvíz – F = 10 kN pod 30° (F_x?), pak tentýž úhel od svislice (F_y?). */
@@ -578,18 +677,8 @@ private fun CardScope.Grid345() {
 private fun CardScope.CheckCos() {
     val t = tr()
     val solved = solvedHere
-    Stage(h = 210.0, description = t.pick(L("Síla 10 kN pod úhlem 30° k nosníku", "Сила 10 кН под углом 30° к балке"))) { c ->
-        beam(20.0, 380.0, 175.0, c)
-        inclined(300.0, 170.0, 30.0, c, 1f, if (solved) 1f else 0f, atTip = true)
-        // tentýž úhel měřený od svislice: 60°
-        val tx = 300.0
-        val ty = 170.0
-        line(tx, ty, tx, ty - 120, c.inkSoft, 1.0, dash = true)
-        prims += Prim.Arc(tx, ty, 50.0, -90.0, -60.0, c.inkSoft, 1.0)
-        text(tx - 22, ty - 62, "60°", c.inkSoft, 12.0, Anchor.END)
-    }
-    Quiz(
-        question = L("Síla [[F]] = 10 kN svírá s nosníkem 30° (cos 30° ≈ 0,866; sin 30° = 0,5). Jak velká je vodorovná složka [[F_x]]?", "Сила [[F]] = 10 кН составляет с балкой 30° (cos 30° ≈ 0,866; sin 30° = 0,5). Чему равна горизонтальная составляющая [[F_x]]?"),
+    val q1 = quizStep(
+        question = L("[[F]] svírá s nosníkem 30°. Jak velká je vodorovná složka [[F_x]]?", "[[F]] составляет с балкой 30°. Чему равна горизонтальная [[F_x]]?"),
         options = listOf(
             Opt(L("8,66 kN", "8,66 кН"), correct = true),
             Opt(L("5 kN", "5 кН"), why = L("To je 10 · sin 30° – složka **naproti** úhlu, tedy svislá [[F_y]]. Kterou funkcí spočítáš složku u úhlu?", "Это 10 · sin 30° — составляющая **напротив** угла, то есть вертикальная [[F_y]]. Какой функцией найти составляющую, прилежащую к углу?")),
@@ -597,13 +686,13 @@ private fun CardScope.CheckCos() {
             Opt(L("11,5 kN", "11,5 кН"), why = L("Složka nikdy není větší než celá síla. Zkus 10 · cos 30°.", "Составляющая никогда не больше всей силы. Попробуй 10 · cos 30°.")),
         ),
         explain = L(
-            "[[F_x]] leží u úhlu, proto kosinus: [[F_x]] = 10 · cos 30° = 8,66 kN. Svislá [[F_y]] = 10 · sin 30° = 5 kN.",
-            "[[F_x]] прилежит к углу, поэтому косинус: [[F_x]] = 10 · cos 30° = 8,66 кН. Вертикальная [[F_y]] = 10 · sin 30° = 5 кН.",
+            "[[F_x]] leží u úhlu, proto kosinus: [[F_x]] = 10 · cos 30° = 8,66 kN. Složka naproti úhlu by šla přes sinus.",
+            "[[F_x]] прилежит к углу, поэтому косинус: [[F_x]] = 10 · cos 30° = 8,66 кН. Составляющая напротив угла — через синус.",
         ),
         columns = 2,
     )
-    Quiz(
-        question = L("Teď je úhel zadaný od **svislice**: síla s ní svírá 60° (cos 60° = 0,5; sin 60° ≈ 0,866). Jak velká je svislá složka [[F_y]]?", "Теперь угол задан от **вертикали**: сила составляет с ней 60° (cos 60° = 0,5; sin 60° ≈ 0,866). Чему равна вертикальная составляющая [[F_y]]?"),
+    val q2 = quizStep(
+        question = L("Teď je úhel 60° měřený od **svislice**. Jak velká je svislá [[F_y]]?", "Теперь угол 60° отсчитан от **вертикали**. Чему равна вертикальная [[F_y]]?"),
         options = listOf(
             Opt(L("5 kN", "5 кН"), correct = true),
             Opt(L("8,66 kN", "8,66 кН"), why = L("To je 10 · sin 60°. Která složka leží **u** úhlu 60° – svislá, nebo vodorovná?", "Это 10 · sin 60°. Какая составляющая **прилежит** к углу 60° — вертикальная или горизонтальная?")),
@@ -615,6 +704,23 @@ private fun CardScope.CheckCos() {
         ),
         columns = 3,
     )
+    Stage(h = 210.0, description = t.pick(L("Síla 10 kN pod úhlem 30° k nosníku", "Сила 10 кН под углом 30° к балке"))) { c ->
+        beam(20.0, 380.0, 175.0, c)
+        inclined(300.0, 170.0, 30.0, c, 1f, if (solved) 1f else 0f, atTip = true)
+        // tentýž úhel měřený od svislice: 60° – ukáže se až u druhé otázky
+        if (q1.done) {
+            val tx = 300.0
+            val ty = 170.0
+            line(tx, ty, tx, ty - 120, c.inkSoft, 1.0, dash = true)
+            prims += Prim.Arc(tx, ty, 50.0, -90.0, -60.0, c.inkSoft, 1.0)
+            text(tx - 22, ty - 62, "60°", c.inkSoft, 12.0, Anchor.END)
+        }
+    }
+    CardText(L(
+        "[[F]] = 10 kN. Hodnoty: cos 30° ≈ 0,866 · sin 30° = 0,5 · cos 60° = 0,5 · sin 60° ≈ 0,866.",
+        "[[F]] = 10 кН. Значения: cos 30° ≈ 0,866 · sin 30° = 0,5 · cos 60° = 0,5 · sin 60° ≈ 0,866.",
+    ))
+    Steps(q1, q2)
 }
 
 internal fun lesson3() = Lesson(

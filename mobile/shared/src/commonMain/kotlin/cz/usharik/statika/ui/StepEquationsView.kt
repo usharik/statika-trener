@@ -81,7 +81,7 @@ fun StepEquationsView(st: EquationsStep, sysKbd: Boolean) {
     // odkaz podle rovnice, do které se právě píše
     val learn = when (st.rows.getOrNull(st.active)?.spec) {
         EqSpec.Fx, EqSpec.Fy -> 2 to 3
-        is EqSpec.M -> 5 to 2
+        is EqSpec.M -> 5 to 3
         is EqSpec.Hinge -> 9 to 1
         null -> 4 to 0
     }

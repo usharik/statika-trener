@@ -5,6 +5,18 @@ import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import cz.usharik.statika.ui.LocalColors
+import cz.usharik.statika.ui.rich
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -105,10 +117,12 @@ private fun CardScope.Puck() {
     fun ux() = cos(ang * PI / 180)
     fun uy() = sin(ang * PI / 180)
     fun maxKn(a: Double) = ((room(px, py, cos(a * PI / 180), sin(a * PI / 180), 16.0, 384.0, 16.0, 204.0) - 18) / arrowPer).coerceAtMost(9.5)
+    // každý krok mění jen jednu vlastnost síly: A směr, B smysl (velikost 30 N), C velikost (směr →); pak volně
+    val step = hit.indexOfFirst { !it }
     fun set(a: Double, k: Double) {
         if (flying || demo) return
-        ang = a
-        kn = min((k * 2).roundToInt() / 2.0, floor(maxKn(a) * 2) / 2.0).coerceAtLeast(0.5)
+        ang = if (step == 2) 0.0 else a
+        kn = if (step == 0 || step == 1) 3.0 else min((k * 2).roundToInt() / 2.0, floor(maxKn(ang) * 2) / 2.0).coerceAtLeast(0.5)
         last = null
     }
     /** kam puk dojede: rovně po nositelce síly, nejdál k mantinelu */
@@ -138,15 +152,20 @@ private fun CardScope.Puck() {
             val g = goals.indexOfFirst { hypot(it.x - ex, it.y - ey) < 17 }
             if (g >= 0) hit[g] = true
             else {
-                // nejbližší nesplněná branka, na kterou šipka míří (stejný směr i smysl)
-                val aim = goals.withIndex().filter { !hit[it.index] }.firstOrNull { (_, gg) ->
+                // míří šipka na právě hledanou branku (stejný směr i smysl)?
+                val aim = goals.getOrNull(step)?.takeIf { gg ->
                     val d = hypot(gg.x - px, gg.y - py)
                     ((gg.x - px) * ux() + (gg.y - py) * uy()) / d > 0.985
                 }
-                why = if (aim == null) 0 else if (hypot(ex - px, ey - py) < hypot(aim.value.x - px, aim.value.y - py)) 1 else 2
+                why = if (aim == null) 0 else if (hypot(ex - px, ey - py) < hypot(aim.x - px, aim.y - py)) 1 else 2
             }
             last = g
             nextPuck(ex to ey)
+            // po trefě A a B začíná další krok znovu od výchozí šipky 30 N → (nový puk se právě prolnul)
+            if (g == 0 || g == 1) {
+                ang = 0.0
+                kn = 3.0
+            }
             flying = false
         }
     }
@@ -237,38 +256,72 @@ private fun CardScope.Puck() {
         text(16.0, 226.0, t.pick(L("čárkovaně: nositelka – přímka, na které síla leží", "пунктир: линия действия — прямая, на которой лежит сила")), c.inkSoft, 12.0, Anchor.START)
     }
     CardText(L(
-        "Síla není jen číslo – záleží i na tom, **kam** působí. Proto ji kreslíme **šipkou**: délka = **velikost**, sklon nositelky = **směr**, hrot = **smysl**, tečka = **působiště**. Nastav šipku (táhni za kroužek) a strč do puku tak, aby trefil všechny tři branky.",
-        "Сила — не просто число: важно и то, **куда** она действует. Поэтому её рисуют **стрелкой**: длина — **величина** (velikost), наклон линии действия — **наклон** (směr), остриё — **направление** (smysl), точка — **точка приложения** (působiště). Настрой стрелку (тяни за кружок) и толкни шайбу так, чтобы она попала во все трое ворот.",
+        "Síla není jen číslo – záleží i na tom, **kam** míří. Proto ji kreslíme **šipkou**: délka = **velikost**, sklon nositelky = **směr**, hrot = **smysl**, tečka = **působiště**.",
+        "Сила — не просто число: важно и то, **куда** она направлена. Поэтому её рисуют **стрелкой**: длина — **величина** (velikost), наклон линии действия — **наклон** (směr), остриё — **направление** (smysl), точка — **точка приложения** (působiště).",
     ))
-    if (demo || (demoSeen && last == null && hit.none { it })) Note(Tone.INFO, L(
-        "**Ukázka:** šipka 30 N doprava → puk jede po nositelce doprava a dojede 3 dílky daleko. Hokejka tlačí vždy po stejně krátké dráze, takže co 10 N, to jeden dílek. Teď ty: nastav šipku (táhni za kroužek nebo použij tlačítka) a strč – tlačítkem nebo klepnutím na puk. Zvýrazněná branka je na řadě.",
-        "**Пример:** стрелка 30 Н вправо → шайба едет вдоль линии действия вправо и проезжает 3 деления. Клюшка всегда толкает на одном и том же коротком пути, поэтому каждые 10 Н — одно деление. Теперь ты: настрой стрелку (тяни за кружок или жми кнопки) и толкни — кнопкой или касанием шайбы. Выделенные ворота — следующие.",
+    SmallText(L(
+        "Hokejka tlačí vždy po stejně krátké dráze, takže co 10 N, to jeden dílek dojezdu puku.",
+        "Клюшка всегда толкает на одном и том же коротком пути, поэтому каждые 10 Н — одно деление пути шайбы.",
     ))
-    Todo(
-        L("Branka **A** je šikmo: natoč šipku (změň **směr**) a tref ji", "Ворота **A** — наискосок: поверни стрелку (измени **наклон**) и попади в них") to hit[0],
-        L("Branka **B** je za pukem: otoč hrot na druhou stranu (změň **smysl**)", "Ворота **B** — позади шайбы: разверни остриё в другую сторону (измени **направление**)") to hit[1],
-        L("Branka **C** je daleko: prodluž šipku (zvětši **velikost**) – silnější strčení, puk jede rychleji a dál", "Ворота **C** — далеко: удлини стрелку (увеличь **величину**) — толчок сильнее, шайба едет быстрее и дальше") to hit[2],
-    )
-    Chips(listOf(L("→", "→"), L("↗", "↗"), L("↑", "↑"), L("←", "←"), L("↓", "↓"))) { i ->
-        set(listOf(0.0, -45.0, -90.0, 180.0, 90.0)[i], kn)
-    }
-    Chips(listOf(L("− 5 N", "− 5 Н"), L("+ 5 N", "+ 5 Н"))) { i -> set(ang, kn + if (i == 0) -0.5 else 0.5) }
-    Readout("[[F]] = ${num(kn * 10, 0)} N")
-    ActionButton(L("Strč do puku", "Толкнуть шайбу"), enabled = !flying) { shoot() }
-    when (last) {
-        null -> {}
-        -1 -> SmallText(when (why) {
-            0 -> L(
-                "Vedle – šipka nemíří na žádnou branku. Puk jede vždy po nositelce síly, tam, kam ukazuje hrot.",
-                "Мимо — стрелка не смотрит ни на одни ворота. Шайба всегда едет по линии действия силы туда, куда показывает остриё.",
-            )
+    val miss: @Composable () -> Unit = {
+        if (last == -1) Note(Tone.NUDGE, when (why) {
+            0 -> L("Vedle – šipka nemíří na branku. Puk jede po nositelce tam, kam ukazuje hrot.", "Мимо — стрелка не смотрит на ворота. Шайба едет по линии действия туда, куда показывает остриё.")
             1 -> L("Směr je dobrý, ale puk nedojel – síla je malá. Prodluž šipku.", "Направление верное, но шайба не доехала — сила мала. Удлини стрелку.")
             else -> L("Směr je dobrý, ale puk přejel – síla je velká. Zkrať šipku.", "Направление верное, но шайба проскочила — сила велика. Укороти стрелку.")
         })
-        0 -> Note(Tone.OK, L("Trefa! **Směr** síly určuje, po které přímce puk pojede.", "Попал! **Наклон** силы определяет, по какой прямой поедет шайба."))
-        1 -> Note(Tone.OK, L("Trefa! Stejná nositelka, opačný **smysl** – puk jede opačně.", "Попал! Та же линия действия, обратное **направление** — шайба едет в обратную сторону."))
-        else -> Note(Tone.OK, L("Trefa! Větší **velikost** síly = větší rychlost, puk dojede dál.", "Попал! Больше **величина** силы — больше скорость, шайба уезжает дальше."))
     }
+    val dirs: @Composable () -> Unit = {
+        Chips(listOf(L("→", "→"), L("↗", "↗"), L("↑", "↑"), L("←", "←"), L("↓", "↓"))) { i ->
+            set(listOf(0.0, -45.0, -90.0, 180.0, 90.0)[i], kn)
+        }
+    }
+    val size: @Composable () -> Unit = {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Chips(listOf(L("− 5 N", "− 5 Н"), L("+ 5 N", "+ 5 Н")), modifier = Modifier.weight(1f)) { i -> set(ang, kn + if (i == 0) -0.5 else 0.5) }
+            Text(rich("[[F]] = ${num(kn * 10, 0)} N"), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = LocalColors.current.ink)
+        }
+    }
+    val shootBtn: @Composable () -> Unit = { ActionButton(L("Strč do puku", "Толкнуть шайбу"), enabled = !flying) { shoot() } }
+    Steps(
+        Step(L("Sleduj ukázku: 30 N doprava pošle puk o 3 dílky", "Смотри пример: 30 Н вправо — шайба проедет 3 деления"), demoSeen && !demo) {
+            SmallText(L("Puk jede po nositelce síly, tam kam míří hrot…", "Шайба едет по линии действия силы, куда смотрит остриё…"))
+        },
+        Step(
+            L("Branka **A** je šikmo: natoč šipku na ni a strč do puku", "Ворота **A** — наискосок: поверни стрелку на них и толкни шайбу"), hit[0],
+            result = { Note(Tone.OK, L("Trefa! **Směr** síly určuje, po které přímce puk pojede.", "Попал! **Наклон** силы определяет, по какой прямой поедет шайба.")) },
+        ) {
+            dirs()
+            shootBtn()
+            miss()
+        },
+        Step(
+            L("Branka **B** je za pukem: otoč **smysl** síly a strč", "Ворота **B** — позади шайбы: разверни **направление** силы и толкни"), hit[1],
+            result = { Note(Tone.OK, L("Trefa! Stejná nositelka, opačný **smysl** – puk jede opačně.", "Попал! Та же линия действия, обратное **направление** — шайба едет в обратную сторону.")) },
+        ) {
+            Chips(listOf(L("Otoč smysl ⇄", "Развернуть ⇄"))) { set((ang + 180.0) % 360.0, kn) }
+            shootBtn()
+            miss()
+        },
+        Step(
+            L("Branka **C** je daleko: nastav **velikost** síly a strč", "Ворота **C** — далеко: подбери **величину** силы и толкни"), hit[2],
+            result = {
+                Note(Tone.OK, L("Trefa! Větší **velikost** síly = větší rychlost, puk dojede dál.", "Попал! Больше **величина** силы — больше скорость, шайба уезжает дальше."))
+                SmallText(L(
+                    "Tři trefy, tři vlastnosti síly: **směr**, **smysl**, **velikost**. Čtvrtá – **působiště** – přijde na řadu o dvě karty dál.",
+                    "Три попадания — три свойства силы: **наклон**, **направление**, **величина**. Четвёртое — **точка приложения** — через две карточки.",
+                ))
+            },
+        ) {
+            size()
+            shootBtn()
+            miss()
+        },
+        after = {
+            dirs()
+            size()
+            shootBtn()
+        },
+    )
 }
 
 /**
@@ -342,34 +395,66 @@ private fun CardScope.TableSpring() {
         text(392.0, 20.0, t.pick(L("prohnutí zvětšeno asi 1000×", "прогиб увеличен примерно в 1000 раз")), c.inkSoft, 12.0, Anchor.END)
     }
     CardText(L(
-        "Bedna leží na stole a nehýbe se. Tlačí stůl na bednu nějakou silou? A jak to „ví“, jak velkou?",
-        "Ящик лежит на столе и не двигается. Давит ли стол на ящик какой-то силой? И откуда стол «знает», с какой?",
+        "Bedna leží na stole a nehýbe se. Odkud stůl „ví“, jak silně ji má držet?",
+        "Ящик лежит на столе и не двигается. Откуда стол «знает», с какой силой его держать?",
     ))
-    Todo(
-        L("Tipni si: klepni na „Ano“, nebo na „Ne, nic se nehýbe“", "Сначала предположи: нажми «Да» или «Нет, ничего не движется»") to (guess != null),
-        L("Polož na stůl bednu (100 kg ≈ 1 kN) a sleduj desku i sílu stolu [[N]]", "Положи на стол ящик (100 кг ≈ 1 кН) и следи за столешницей и силой стола [[N]]") to seenOne,
-        L("Přidej druhou bednu – kolik teď stůl tlačí?", "Добавь второй ящик — с какой силой теперь давит стол?") to seenTwo,
+    var guess2 by remember { mutableStateOf<Int?>(null) }
+    val forces: @Composable () -> Unit = {
+        Readout("[[N]] = ${num(sag.value.toDouble().coerceAtLeast(0.0), 1)} kN · [[G]] = ${num(crates.toDouble(), 1)} kN")
+    }
+    Steps(
+        tipStep(
+            L("Tipni si: tlačí stůl na ležící bednu nějakou silou?", "Как думаешь: давит ли стол на лежащий ящик какой-то силой?"),
+            listOf(L("Ano", "Да"), L("Ne, nic se nehýbe", "Нет, ничего не движется")), guess,
+        ) { guess = it },
+        Step(
+            L("Polož na stůl bednu (100 kg ≈ 1 kN) a sleduj desku", "Положи на стол ящик (100 кг ≈ 1 кН) и следи за столешницей"), seenOne,
+            result = {
+                if (guess == 1) Note(Tone.INFO, L(
+                    "A přece tlačí: deska se prohnula a pruží zpátky nahoru – jinak by bedna propadla.",
+                    "И всё-таки давит: столешница прогнулась и пружинит обратно вверх — иначе ящик провалился бы.",
+                ))
+                SmallText(L(
+                    "Deska funguje jako **pružina**: čím víc se prohne, tím víc tlačí. Chvíli kmitá (pak tlačí víc i míň než tíha) a ustálí se, až [[N]] = [[G]]. Síla působí, i když se nic nehýbe.",
+                    "Столешница работает как **пружина**: чем сильнее прогиб, тем сильнее она давит. Сначала колеблется (сила то больше, то меньше веса) и успокаивается, когда [[N]] = [[G]]. Сила действует, даже когда ничего не движется.",
+                ))
+            },
+        ) {
+            forces()
+            ActionButton(L("Polož bednu", "Положить ящик"), enabled = crates == 0) { place(1) }
+        },
+        tipStep(
+            L("Přibude druhá bedna. Jak velkou silou [[N]] bude stůl tlačit?", "Добавим второй ящик. С какой силой [[N]] будет давить стол?"),
+            listOf(L("1 kN – pořád stejně", "1 кН — как раньше"), L("2 kN", "2 кН"), L("víc než 2 kN", "больше 2 кН")), guess2,
+        ) { guess2 = it },
+        Step(
+            L("Polož druhou bednu a ověř svůj tip", "Положи второй ящик и проверь свой прогноз"), seenTwo,
+            result = {
+                Note(if (guess2 == 1) Tone.OK else Tone.INFO, L(
+                    (if (guess2 == 1) "Správně. " else "") + "Dvojnásobná tíha → dvojnásobné prohnutí → stůl tlačí 2 kN. Podpory nosníků se chovají stejně." +
+                        (if (guess2 == 2) " Chvíli opravdu tlačil víc – když deska překmitla. Ustálí se ale přesně na 2 kN." else ""),
+                    (if (guess2 == 1) "Верно. " else "") + "Вдвое больше вес → вдвое больше прогиб → стол давит с силой 2 кН. Опоры балок ведут себя так же." +
+                        (if (guess2 == 2) " На мгновение он и правда давил сильнее — пока столешница колебалась. Но успокаивается ровно на 2 кН." else ""),
+                ))
+            },
+        ) {
+            forces()
+            ActionButton(L("Polož druhou bednu", "Положить второй ящик"), enabled = crates == 1 && settled == 1) { place(2) }
+        },
     )
-    Chips(listOf(L("Ano", "Да"), L("Ne, nic se nehýbe", "Нет, ничего не движется")), guess) { if (guess == null) guess = it }
-    if (guess != null) Chips(listOf(L("Polož bednu", "Положить ящик"), L("Odeber bednu", "Убрать ящик"))) { i ->
-        if (i == 0 && crates < 2) place(crates + 1)
-        if (i == 1 && crates > 0) place(crates - 1)
-    }
-    if (settled >= 1) {
-        if (guess == 1 && !seenTwo) Note(Tone.INFO, L(
-            "A přece tlačí: deska se prohnula a pruží zpátky nahoru – jinak by bedna propadla.",
-            "И всё-таки давит: столешница прогнулась и пружинит обратно вверх — иначе ящик провалился бы.",
-        ))
-        SmallText(L(
-            "Deska funguje jako **pružina**: čím víc se prohne, tím víc tlačí. Chvíli kmitá (pak tlačí víc i míň než tíha) a ustálí se, až [[N]] = [[G]]. Síla působí, i když se nic nehýbe.",
-            "Столешница работает как **пружина**: чем сильнее прогиб, тем сильнее она давит. Сначала колеблется (сила то больше, то меньше веса) и успокаивается, когда [[N]] = [[G]]. Сила действует, даже когда ничего не движется.",
-        ))
-    }
-    if (seenTwo && settled == 2) Note(Tone.OK, L(
-        "Dvojnásobná tíha → dvojnásobné prohnutí → stůl tlačí 2 kN. Podpory nosníků se chovají stejně.",
-        "Вдвое больше вес → вдвое больше прогиб → стол давит с силой 2 кН. Опоры балок ведут себя так же.",
-    ))
 }
+
+/**
+ * Tip před pokusem: krok se splní jakoukoli volbou, správnost ukáže až následující pokus.
+ * Ve výkladu pak zůstane „Tvůj tip: …“.
+ */
+@Composable
+private fun tipStep(label: L, options: List<L>, pick: Int?, onPick: (Int) -> Unit): Step =
+    Step(label, pick != null, result = {
+        pick?.let { SmallText(L("Tvůj tip: **${options[it].cs}**", "Твой прогноз: **${options[it].ru}**")) }
+    }) {
+        Chips(options, pick) { if (pick == null) onPick(it) }
+    }
 
 /** Rohy obdélníku w × h se středem (cx, cy) otočeného o úhel a (rad, osa y dolů). */
 private fun plateCorners(cx: Double, cy: Double, w: Double, h: Double, a: Double): List<Pair<Double, Double>> {
@@ -401,17 +486,22 @@ private fun CardScope.LineOfAction() {
     val acc = 230.0 // zrychlení během strčení (jednotek/s²)
     val push = 0.5 // jak dlouho síla působí (s)
     val endT = 2.2
-    var mode by remember { mutableStateOf<Int?>(null) } // 0 tlačí zezadu, 1 táhne zepředu, 2 jiná nositelka
-    var guess by remember { mutableStateOf<Int?>(null) } // tip pro jinou nositelku
+    var guessRope by remember { mutableStateOf<Int?>(null) } // tip pro lano zepředu: 0 stejně, 1 rychleji, 2 pomaleji
+    var guess by remember { mutableStateOf<Int?>(null) } // tip pro jinou nositelku: 0 stejně, 1 ↻, 2 ↺
     var time by remember { mutableDoubleStateOf(-1.0) } // -1 = deska stojí na startu
     var alpha by remember { mutableStateOf(1f) }
     var runMode by remember { mutableStateOf(0) }
     val ghosts = remember { mutableStateListOf<Pose>() }
     val prev = remember { mutableStateListOf<Pose>() } // stopa minulého pokusu (šedě)
     val done = remember { mutableStateListOf(false, false, false) }
-    var lastDone by remember { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
     val running = time >= 0
+    // režim určuje aktuální krok: 0 tlačí zezadu, 1 táhne lanem zepředu, 2 jiná (rovnoběžná) nositelka
+    val mode: Int? = when {
+        !done[0] -> 0
+        !done[1] -> 1
+        else -> 2
+    }
     /** stav desky v čase s pro daný režim: posun s(t), úhel θ(t) */
     fun pose(s: Double, m: Int): Pose {
         val tp = min(s, push)
@@ -423,9 +513,8 @@ private fun CardScope.LineOfAction() {
     }
     fun run() {
         val m = mode ?: return
-        if (running || (m == 2 && guess == null)) return
+        if (running || (m == 1 && guessRope == null) || (m == 2 && guess == null)) return
         runMode = m
-        lastDone = null
         scope.launch {
             ghosts.clear()
             alpha = 1f
@@ -451,7 +540,6 @@ private fun CardScope.LineOfAction() {
                 delay(25)
             }
             done[m] = true
-            lastDone = m
             prev.clear()
             prev += ghosts
             ghosts.clear()
@@ -498,6 +586,8 @@ private fun CardScope.LineOfAction() {
                 val left = now.x - pw / 2
                 val right = now.x + pw / 2
                 if (m == 1) {
+                    // původní šipka zezadu slabě: síla se jen posunula po své nositelce
+                    if (!running) force(left - 56, lineY, left, lineY, c.load, width = 2.0, alpha = 0.25f, dash = true)
                     force(right, lineY, right + 56, lineY, c.load, width = 3.0)
                     text(right + 28, lineY - 10, t.pick(L("lano", "трос")), c.load, 11.0)
                 } else {
@@ -513,43 +603,48 @@ private fun CardScope.LineOfAction() {
         }
     }
     CardText(L(
-        "Deska leží na **vzduchovém stole** – klouže bez tření, takže je dobře vidět, co s ní udělá jedno krátké strčení. Síla je vždy stejně velká a působí stejně dlouho; měníš jen, **kde** působí. Zkus ji posunout **po její nositelce** (čárkované přímce) a pak na **jinou, rovnoběžnou** nositelku.",
-        "Пластина лежит на **воздушном столе** — скользит без трения, поэтому хорошо видно, что с ней делает один короткий толчок. Сила всегда одинаковая и действует одинаково долго; меняешь только, **где** она приложена. Сдвинь её **вдоль её линии действия** (пунктира), а потом на **другую, параллельную** линию.",
+        "Deska klouže po **vzduchovém stole** bez tření. Pokaždé do ní krátce strčíme stejně velkou silou – měníme jen to, **kde** síla působí.",
+        "Пластина скользит по **воздушному столу** без трения. Каждый раз коротко толкаем её одной и той же силой — меняем только то, **где** сила приложена.",
     ))
-    Todo(
-        L("Strč do desky **zezadu** po nositelce, která jde těžištěm T", "Толкни пластину **сзади** вдоль линии, проходящей через центр тяжести T") to done[0],
-        L("Posuň sílu po téže nositelce **dopředu** a táhni lanem – jede deska jinak?", "Сдвинь силу вдоль той же линии **вперёд** и тяни тросом — едет ли пластина иначе?") to done[1],
-        L("Tipni si, co udělá síla na **jiné** (rovnoběžné) nositelce, a vyzkoušej to", "Предположи, что сделает сила на **другой** (параллельной) линии, и проверь") to done[2],
+    Steps(
+        Step(
+            L("Strč do desky zezadu – síla míří těžištěm T", "Толкни пластину сзади — сила идёт через центр тяжести T"), done[0],
+            result = {
+                SmallText(L(
+                    "Síla jde těžištěm: deska se během strčení rozjíždí (záblesky se rozestupují) a pak jede stálou rychlostí – nic ji nebrzdí. Stopa zůstala šedě.",
+                    "Сила проходит через центр тяжести: во время толчка пластина разгоняется (вспышки расходятся), а потом едет с постоянной скоростью — её ничто не тормозит. След остался серым.",
+                ))
+            },
+        ) { ActionButton(L("Strč", "Толкнуть"), enabled = !running) { run() } },
+        tipStep(
+            L("Stejná síla teď táhne lanem zepředu. Jak deska pojede?", "Та же сила теперь тянет тросом спереди. Как поедет пластина?"),
+            listOf(L("úplně stejně", "точно так же"), L("rychleji", "быстрее"), L("pomaleji", "медленнее")), guessRope,
+        ) { guessRope = it },
+        Step(
+            L("Zatáhni lanem a porovnej záblesky se šedou stopou", "Потяни тросом и сравни вспышки с серым следом"), done[1],
+            result = {
+                Note(if (guessRope == 0) Tone.OK else Tone.INFO, L(
+                    (if (guessRope == 0) "Správně – " else "Ne – ") + "úplně stejná stopa jako při tlačení zezadu. Sílu smíš posunout **po její nositelce** – na pohyb tělesa to nemá vliv.",
+                    (if (guessRope == 0) "Верно — " else "Нет — ") + "точно такой же след, как при толчке сзади. Силу можно сдвигать **вдоль её линии действия** — на движение тела это не влияет.",
+                ))
+            },
+        ) { ActionButton(L("Zatáhni lanem", "Потянуть тросом"), enabled = !running) { run() } },
+        tipStep(
+            L("Sílu posuneme na rovnoběžnou nositelku nad T. Co deska udělá?", "Сдвинем силу на параллельную линию выше T. Что сделает пластина?"),
+            listOf(L("Pojede stejně", "Поедет так же"), L("Pojede a točí se ↻", "Поедет и закрутится ↻"), L("Pojede a točí se ↺", "Поедет и закрутится ↺")), guess,
+        ) { guess = it },
+        Step(
+            L("Strč po nové nositelce a sleduj křížky těžiště", "Толкни по новой линии и следи за крестиками центра тяжести"), done[2],
+            result = {
+                Note(if (guess == 1) Tone.OK else Tone.INFO, L(
+                    (if (guess == 1) "Správně. " else "Ve skutečnosti se točí ↻. ") +
+                        "Těžiště T jede pořád stejně (křížky dopadají na šedé tečky), ale deska se navíc roztočí. Stejná síla na jiné nositelce má navíc **otáčivý účinek – moment** [[M]] = [[F]] · d (lekce 4).",
+                    (if (guess == 1) "Верно. " else "На самом деле крутится ↻. ") +
+                        "Центр тяжести T едет так же (крестики попадают на серые точки), но пластина ещё и закручивается. Та же сила на другой линии действия даёт ещё и **вращающее действие — момент** [[M]] = [[F]] · d (урок 4).",
+                ))
+            },
+        ) { ActionButton(L("Strč", "Толкнуть"), enabled = !running) { run() } },
     )
-    Chips(
-        listOf(L("Tlačí zezadu", "Толкает сзади"), L("Táhne lanem zepředu", "Тянет тросом спереди"), L("Jiná nositelka (výš)", "Другая линия (выше)")),
-        mode,
-    ) { if (!running) mode = it }
-    if (mode == 2) {
-        SmallText(L("Co udělá deska, když síla nepůjde těžištěm?", "Что сделает пластина, если сила не проходит через центр тяжести?"))
-        Chips(
-            listOf(L("Pojede stejně", "Поедет так же"), L("Pojede a točí se ↻", "Поедет и закрутится ↻"), L("Pojede a točí se ↺", "Поедет и закрутится ↺")),
-            guess,
-        ) { if (!running) guess = it }
-    }
-    ActionButton(L("Strč", "Толкнуть"), enabled = mode != null && !running && (mode != 2 || guess != null)) { run() }
-    when (lastDone) {
-        1 -> Note(Tone.OK, L(
-            "Úplně stejná stopa jako při tlačení zezadu. Sílu smíš posunout **po její nositelce** – na pohyb tělesa to nemá vliv.",
-            "Точно такой же след, как при толчке сзади. Силу можно сдвигать **вдоль её линии действия** — на движение тела это не влияет.",
-        ))
-        2 -> Note(if (guess == 1) Tone.OK else Tone.INFO, L(
-            (if (guess == 1) "Správně. " else "Ve skutečnosti se točí ↻. ") +
-                "Těžiště T jede pořád stejně (křížky dopadají na šedé tečky), ale deska se navíc roztočí. Stejná síla na jiné nositelce má navíc **otáčivý účinek – moment** [[M]] = [[F]] · d (lekce 4).",
-            (if (guess == 1) "Верно. " else "На самом деле крутится ↻. ") +
-                "Центр тяжести T едет так же (крестики попадают на серые точки), но пластина ещё и закручивается. Та же сила на другой линии действия даёт ещё и **вращающее действие — момент** [[M]] = [[F]] · d (урок 4).",
-        ))
-        0 -> SmallText(L(
-            "Síla jde těžištěm: deska se během strčení rozjíždí (záblesky se rozestupují) a pak jede stálou rychlostí – nic ji nebrzdí.",
-            "Сила проходит через центр тяжести: во время толчка пластина разгоняется (вспышки расходятся), а потом едет с постоянной скоростью — её ничто не тормозит.",
-        ))
-        else -> {}
-    }
 }
 
 /** Předmět na siloměru: název a hmotnost v kg. */
@@ -612,41 +707,74 @@ private fun CardScope.SpringScale() {
         }
     }
     CardText(L(
-        "Síly měříme **siloměrem** – pružinou, která se natáhne tím víc, čím větší síla za ni tahá. Jednotka je newton (N); ve statice počítáme v **kilonewtonech**: 1 kN = 1000 N. Než začneš věšet: **který předmět má podle tebe tíhu asi 1 kN?**",
-        "Силы измеряют **динамометром** — пружиной, которая растягивается тем сильнее, чем больше сила. Единица — ньютон (Н); в статике считаем в **килоньютонах**: 1 кН = 1000 Н. Прежде чем подвешивать: **какой предмет, по-твоему, весит около 1 кН?**",
+        "Síly měříme **siloměrem** – pružinou, která se natáhne tím víc, čím větší síla za ni tahá. Jednotka je newton (N); ve statice počítáme v **kilonewtonech**: 1 kN = 1000 N.",
+        "Силы измеряют **динамометром** — пружиной, которая растягивается тем сильнее, чем больше сила. Единица — ньютон (Н); в статике считаем в **килоньютонах**: 1 кН = 1000 Н.",
     ))
-    Todo(
-        L("Tipni si, co má tíhu asi 1 kN", "Предположи, что весит около 1 кН") to (guess != null),
-        L("Zavěs jablko – ručička se skoro nehne", "Подвесь яблоко — стрелка почти не сдвинется") to tried[0],
-        L("Najdi předmět, jehož tíha je asi **1 kN**", "Найди предмет, сила тяжести которого около **1 кН**") to tried[3],
-        L("Zavěs malé auto (asi 1 t)", "Подвесь маленькую машину (около 1 т)") to tried[4],
-    )
-    if (guess == null) {
-        Chips(things.map { it.name }, null) { guess = it }
-    } else {
-        SmallText(L(
-            "Tvůj tip: **${things[guess!!].name.cs}**. Teď věš předměty na siloměr a ověř to.",
-            "Твоё предположение: **${things[guess!!].name.ru}**. Теперь подвешивай предметы и проверь.",
-        ))
-        Chips(things.map { it.name }, pick) { i ->
-            pick = i
-            tried[i] = true
-            // pružina se ustálí s mírným zákmitem (silně tlumená, aby nevyskočila ze stupnice)
-            scope.launch { stretch.animateTo((things[i].kg / 100).toFloat(), spring(dampingRatio = 0.5f, stiffness = 60f)) }
+    var hungTip by remember { mutableStateOf(false) } // tipnutý předmět visel a pružina se ustálila
+    fun hang(i: Int) {
+        pick = i
+        tried[i] = true
+        // pružina se ustálí s mírným zákmitem (silně tlumená, aby nevyskočila ze stupnice)
+        scope.launch {
+            stretch.animateTo((things[i].kg / 100).toFloat(), spring(dampingRatio = 0.5f, stiffness = 60f))
+            if (i == guess) hungTip = true
         }
     }
-    pick?.let { i ->
-        val kn = things[i].kg / 100
-        Readout(if (kn < 0.01) "[[G]] ≈ ${num(kn * 1000, 0)} N = ${num(kn, 3)} kN" else "[[G]] ≈ ${num(kn, 2)} kN")
+    val reading: @Composable () -> Unit = {
+        pick?.let { i ->
+            val kn = things[i].kg / 100
+            Readout(if (kn < 0.01) "[[G]] ≈ ${num(kn * 1000, 0)} N = ${num(kn, 3)} kN" else "[[G]] ≈ ${num(kn, 2)} kN")
+        }
     }
-    if (tried[3] && guess != null && guess != 3) Note(Tone.INFO, L(
-        "Tip nevyšel – nevadí, odhad sil je potřeba vycvičit. Asi 1 kN má sud se 100 litry vody.",
-        "Не угадал — ничего, чувство силы нужно натренировать. Около 1 кН весит бочка со 100 литрами воды.",
-    ))
-    if (tried[3]) SmallText(L(
-        "Pamatuj: **1 kN ≈ tíha 100 kg** (přesně 0,98 kN). Jablko má asi 1 N, malé auto asi 10 kN.",
-        "Запомни: **1 кН ≈ сила тяжести 100 кг** (точно 0,98 кН). Яблоко — около 1 Н, маленькая машина — около 10 кН.",
-    ))
+    val car = quizStep(
+        question = L("Malé auto má 1 tunu. Kolik ukáže siloměr?", "Маленькая машина — 1 тонна. Сколько покажет динамометр?"),
+        options = listOf(
+            Opt(L("1 kN", "1 кН"), why = L("1 kN je 100 kg. Kolikrát je tuna víc?", "1 кН — это 100 кг. Во сколько раз тонна больше?")),
+            Opt(L("10 kN", "10 кН"), correct = true),
+            Opt(L("100 kN", "100 кН"), why = L("1 t = 1000 kg = 10 × 100 kg.", "1 т = 1000 кг = 10 × 100 кг.")),
+            Opt(L("1000 kN", "1000 кН"), why = L("1 t = 1000 kg = 10 × 100 kg.", "1 т = 1000 кг = 10 × 100 кг.")),
+        ),
+        explain = L(
+            "1 t = 1000 kg = 10 × 100 kg, tedy asi **10 kN**. Jablko má asi 1 N, malé auto asi 10 kN.",
+            "1 т = 1000 кг = 10 × 100 кг, то есть около **10 кН**. Яблоко — около 1 Н, маленькая машина — около 10 кН.",
+        ),
+        columns = 2,
+    )
+    // po odpovědi se auto samo zavěsí – ručička doběhne na 10 kN
+    LaunchedEffect(car.done) { if (car.done && pick != 4) hang(4) }
+    Steps(
+        tipStep(
+            L("Tipni si: který předmět má tíhu asi 1 kN?", "Как думаешь: какой предмет весит около 1 кН?"),
+            things.map { it.name }, guess,
+        ) { guess = it },
+        Step(L("Zavěs svůj tip na siloměr a přečti stupnici", "Подвесь свой вариант на динамометр и посмотри на шкалу"), hungTip) {
+            val g = guess ?: 0
+            reading()
+            ActionButton(L("Zavěs: ${things[g].name.cs}", "Подвесить: ${things[g].name.ru}"), enabled = pick != g) { hang(g) }
+        },
+        Step(
+            L("Najdi předmět, který ukáže asi 1 kN", "Найди предмет, который покажет около 1 кН"), tried[3],
+            result = {
+                if (guess != 3) Note(Tone.INFO, L(
+                    "Tip nevyšel – nevadí, odhad sil je potřeba vycvičit. Asi 1 kN má sud se 100 litry vody.",
+                    "Не угадал — ничего, чувство силы нужно натренировать. Около 1 кН весит бочка со 100 литрами воды.",
+                ))
+                SmallText(L(
+                    "Pamatuj: **1 kN ≈ tíha 100 kg** (přesně 0,98 kN).",
+                    "Запомни: **1 кН ≈ сила тяжести 100 кг** (точно 0,98 кН).",
+                ))
+            },
+        ) {
+            // auto tu ještě není – jeho údaj je otázkou dalšího kroku
+            Chips(things.take(4).map { it.name }, pick) { hang(it) }
+            reading()
+        },
+        car,
+        after = {
+            Chips(things.map { it.name }, pick) { hang(it) }
+            reading()
+        },
+    )
 }
 
 /** Karta 4: kvíz – stejný směr, opačný smysl. */
@@ -668,8 +796,9 @@ private fun CardScope.CheckSense() {
         // C: rovnoběžná, stejný hrot (jen posunutá)
         diag(340.0, 95.0, 1.0, c.ink, "C")
     }
-    Quiz(
-        question = L("Která šipka má stejný směr (sklon) jako [[F]], ale opačný smysl (hrot na druhou stranu)?", "У какой стрелки тот же наклон (směr), что у [[F]], но противоположное направление (smysl) — остриё в другую сторону?"),
+    CardText(L("**Směr** = sklon nositelky. **Smysl** = kam míří hrot.", "**Наклон** (směr) — наклон линии действия. **Направление** (smysl) — куда смотрит остриё."))
+    Steps(quizStep(
+        question = L("Která šipka má stejný směr jako [[F]], ale opačný smysl?", "У какой стрелки тот же наклон, что у [[F]], но обратное направление?"),
         options = listOf(
             Opt(L("A", "A"), correct = true),
             Opt(L("B", "B"), why = L("B má jiný sklon, tedy jiný směr. Která šipka je s [[F]] rovnoběžná, ale hrot má na druhé straně?", "У B другой наклон. Какая стрелка параллельна [[F]], но остриё у неё с другой стороны?")),
@@ -680,7 +809,7 @@ private fun CardScope.CheckSense() {
             "Наклон (směr) у параллельных стрелок одинаковый. Направление (smysl) — куда смотрит остриё: A параллельна [[F]], но направлена противоположно.",
         ),
         columns = 3,
-    )
+    ))
 }
 
 internal fun lesson1() = Lesson(
