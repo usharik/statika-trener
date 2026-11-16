@@ -1,0 +1,3 @@
+# JSON servisního účtu Google Play (stejný jako u MySongbook, CzechDeclensionQuiz a XeroxPhaserPrint), v .gitignore
+json_key_file(ENV["PLAY_STORE_JSON_KEY_PATH"] || File.expand_path("../pc-api-key.json", __dir__))
+package_name("cz.usharik.statika")

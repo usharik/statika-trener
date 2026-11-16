@@ -1,0 +1,6 @@
+# generuje xcodegen (ci.sh / ruční `xcodegen generate`)
+Statika.xcodeproj/
+build/
+# Firebase konfigurace se do repozitáře nedává (stejně jako google-services.json u Androidu)
+Statika/GoogleService-Info.plist
+signing/

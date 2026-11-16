@@ -1,0 +1,28 @@
+Statika: reakce nosníků je trenažér pro studenty průmyslovek a technických oborů. Na náhodně vygenerovaných nosnících spočítáš reakce podpor stejným postupem, jaký píšeš do sešitu – a aplikace tě v každém kroku zkontroluje.
+
+Pět kroků jako na papíře
+• Uvolnění: u každé podpory vybereš, jaké reakce v ní vznikají.
+• Zatížení: šikmou sílu rozložíš na složky, spojité zatížení nahradíš výslednicí.
+• Rovnice: napíšeš rovnice rovnováhy ΣFx = 0, ΣFy = 0 a ΣM = 0 – z palety symbolů nebo klávesnicí.
+• Výpočet: dosadíš a spočítáš reakce.
+• Hotovo: výkres ukáže skutečné směry reakcí a kontrolu výsledku.
+
+Chyba není konec
+• Aplikace nehlásí jen „špatně“ – ukáže, kde je problém: chybějící člen, opačné znaménko, špatné rameno.
+• Nápověda napovídá postupně, vždy jen tolik, kolik potřebuješ.
+• U typických chyb nabídne odkaz na příslušnou lekci výkladu.
+
+Základy statiky
+Krátký interaktivní výklad v 9 lekcích: síla jako šipka, rovnováha sil, složky síly, moment, rovnováha momentů, podpory a vazby, uvolnění, spojité zatížení a kloub. Každá karta má úkol, který si vyzkoušíš přímo na obrázku – je vhodný i pro ty, kdo fyziku nemají v malíčku.
+
+Základy trigonometrie
+Odkud se berou sin, cos a tg, jednotková kružnice, hodnoty pro 30°, 45° a 60°, které si snadno zapamatuješ, a hlavně jak s nimi rozložit sílu na složky. 8 krátkých lekcí a procvičování s okamžitou kontrolou a rozborem chyb.
+
+Úlohy podle tebe
+• Čtyři typy nosníků: prostý, s převislým koncem, vetknutý a Gerberův nosník s kloubem.
+• Tři obtížnosti.
+• Oblíbené úlohy si uložíš hvězdičkou a kdykoli se k nim vrátíš.
+• Každá úloha má číslo – pošli ho spolužákovi nebo otevři úlohu podle čísla od učitele.
+• Čeština a ruština, světlé i tmavé téma, telefon i tablet.
+
+Aplikace je zdarma s reklamou. Reklamu můžeš natrvalo odstranit jednorázovým nákupem.

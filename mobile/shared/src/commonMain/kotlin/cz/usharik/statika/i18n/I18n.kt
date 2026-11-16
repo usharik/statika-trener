@@ -1,0 +1,194 @@
+package cz.usharik.statika.i18n
+
+import androidx.compose.runtime.staticCompositionLocalOf
+
+enum class Lang(val code: String) {
+    CS("cs"), RU("ru");
+
+    companion object {
+        fun of(code: String?): Lang? = entries.firstOrNull { it.code == code }
+    }
+}
+
+/** Texty, které má jen mobilní aplikace. */
+private val CS_APP = mapOf(
+    "menu" to "Menu",
+    "signToggle" to "Změnit znaménko",
+    "favorites" to "Oblíbené úlohy",
+    "favAdd" to "Přidat do oblíbených",
+    "favRemove" to "Odebrat z oblíbených",
+    "favAdded" to "Uloženo do oblíbených – seznam otevřeš tlačítkem ★ nahoře.",
+    "favRemoved" to "Odebráno z oblíbených.",
+    "favEmpty" to "Zatím tu nic není. Úlohu uložíš hvězdičkou ☆ vpravo nad výkresem.",
+    "favSolved" to "vyřešeno",
+    "favCurrent" to "právě otevřená",
+    "favDelete" to "Smazat",
+    "favOpenTitle" to "Otevřít oblíbenou úlohu?",
+    "favOpenText" to "Rozpracovaná úloha se zahodí.",
+    "language" to "Jazyk",
+    "theme" to "Vzhled",
+    "themeSystem" to "Podle systému",
+    "openProblem" to "Úloha podle čísla",
+    "openProblemHint" to "Číslo úlohy od učitele nebo spolužáka",
+    "open" to "Otevřít",
+    "share" to "Sdílet úlohu",
+    "shareText" to "Zkus úlohu č. {n} ({level}) v trenažéru Statika · nosníky: {url}",
+    "removeAds" to "Odstranit reklamu",
+    "removeAdsDesc" to "Jednorázový nákup – reklama zmizí natrvalo a podpoříš další vývoj.",
+    "restorePurchases" to "Obnovit nákupy",
+    "adFree" to "Bez reklamy – děkujeme za podporu!",
+    "privacyOptions" to "Souhlas s reklamou a soukromí",
+    "privacyPolicy" to "Zásady ochrany osobních údajů",
+    "version" to "Verze",
+    "close" to "Zavřít",
+    "systemKeyboard" to "Systémová klávesnice",
+    "drawing" to "Výkres",
+    "genError" to "Úlohu se nepodařilo vytvořit – zkusíme jinou.",
+    "p_badValue" to "Tady nevychází rozumné číslo (třeba odmocnina ze záporného čísla nebo tan 90°).",
+    "p_cut" to "Zápis jsem upravil na „{text}“ — pokračuj odtud.",
+    "p_removed" to "Člen „{term}“ nepatří k žádné síle, odstranil jsem ho.",
+    "confirmNewTitle" to "Začít novou úlohu?",
+    "confirmNewText" to "Rozpracovaná úloha se ztratí.",
+    "cancel" to "Zrušit",
+    "p_fixedTerm" to "Člen s [[{s}]] jsem opravil na „{term}“ — zbytek zkus dopsat.",
+    "p_removedSym" to "Člen s [[{s}]] jsem odstranil — do této rovnice nepatří.",
+    "p_dangling" to "Za posledním znaménkem ještě něco chybí — doplň člen, nebo znaménko smaž.",
+    "p_qInsteadQ" to "U [[{s}]] jsi patrně dosadil intenzitu q. Do silové rovnice patří výslednice [[{s}]] = q · l.",
+    "near" to "Skoro! Jen zaokrouhluješ příliš hrubě — počítej aspoň na dvě desetinná místa.",
+    "f_rad" to "Tohle vyjde, když je kalkulačka v režimu RAD (nebo GRAD). Přepni ji na DEG a ověř, že sin 30 = 0,5.",
+    "learnLink" to "Základy: {title}",
+    "learnLinkTrig" to "Trigonometrie: {title}",
+    "learnTitle" to "Základy statiky",
+    // --- prohlídka aplikace při prvním spuštění ---
+    "tourWelcomeTitle" to "Vítej v trenažéru statiky",
+    "tourWelcomeText" to "Tady se naučíš krok za krokem počítat **reakce v podporách nosníků** – tak, jak se to dělá ve škole. Ukážu ti, co kde najdeš. Zabere to půl minuty.",
+    "tourDrawingTitle" to "Zadání úlohy",
+    "tourDrawingText" to "Na výkresu je nosník, jeho podpory a zatížení (síly, momenty, spojité zatížení). Kóty jsou v metrech. Vlevo nahoře je číslo úlohy – podle něj otevře stejnou úlohu i spolužák nebo učitel.",
+    "tourStepperTitle" to "Pět kroků řešení",
+    "tourStepperText" to "Každou úlohu řešíš ve stejném pořadí: **uvolnění** (jaké reakce mají podpory), **zatížení** (rozklad sil), **rovnice** rovnováhy, **výpočet** reakcí a **hotovo** s výsledky. Tady vidíš, kde právě jsi.",
+    "tourWorkTitle" to "Tady pracuješ",
+    "tourWorkText" to "V této části plníš aktuální krok – odpovídáš, píšeš rovnice a počítáš. Každou odpověď aplikace hned zkontroluje. Když nevíš, klepni na **Nápověda**; po chybě se dozvíš, co je špatně.",
+    "tourStarTitle" to "Uložit úlohu",
+    "tourStarText" to "Hvězdičkou ☆ si zajímavou nebo těžkou úlohu uložíš do oblíbených a vrátíš se k ní později.",
+    "tourFavoritesTitle" to "Oblíbené úlohy",
+    "tourFavoritesText" to "Tady je seznam uložených úloh. Klepnutím úlohu znovu otevřeš, vyřešené jsou označené.",
+    "tourNewTitle" to "Nová úloha",
+    "tourNewText" to "Tímto tlačítkem ↻ dostaneš jinou úlohu. Když máš úlohu rozpracovanou, aplikace se nejdřív zeptá, jestli ji opravdu chceš zahodit.",
+    "tourLearnTitle" to "Výklad a procvičování",
+    "tourLearnText" to "Pod knížkou je krátký interaktivní **výklad statiky** (9 lekcí: síla, moment, podpory, reakce…), **základy trigonometrie** (sin, cos, tg a jak s nimi rozložit sílu) a **procvičování**. Když si v úloze nevíš rady, odkaz tě sem zavede na správné místo.",
+    "tourSettingsTitle" to "Nastavení",
+    "tourSettingsText" to "Tady zvolíš **obtížnost** a **typy nosníků**, jazyk a světlý nebo tmavý vzhled. Můžeš otevřít úlohu podle čísla, poslat ji spolužákovi nebo odstranit reklamu. A taky tu tuhle prohlídku spustíš znovu.",
+    "tourEndTitle" to "Je pro tebe statika nová?",
+    "tourEndText" to "Pak začni krátkým výkladem: 9 lekcí, asi půl hodiny. Kdykoli ho najdeš pod ikonou knížky nahoře. Jinak se rovnou pusť do první úlohy – hodně štěstí!",
+    "tourBack" to "Zpět",
+    "tourNext" to "Dál",
+    "tourSkip" to "Přeskočit",
+    "tourCount" to "{n} z {of}",
+    "tourRestart" to "Prohlídka aplikace",
+    "firstRunYes" to "Ano, ukaž mi základy",
+    "firstRunNo" to "Ne, jdu rovnou počítat",
+    "p_useComp" to "Do této rovnice patří složka [[{s}]], ne celá šikmá síla [[{F}]].",
+    "v_negM" to "Záporná hodnota [[{u}]] znamená, že moment ve skutečnosti otáčí opačně, než jsme předpokládali.",
+    // --- vstup do výkladu a odkaz na trigonometrii (úpravy kurzu trigonometrie) ---
+    "learnOpen" to "Výklad a procvičování",
+    "trigLink" to "Nejde ti sin a cos? → Základy trigonometrie",
+)
+
+private val RU_APP = mapOf(
+    "menu" to "Меню",
+    "signToggle" to "Сменить знак",
+    "favorites" to "Избранные задачи",
+    "favAdd" to "Добавить в избранное",
+    "favRemove" to "Убрать из избранного",
+    "favAdded" to "Сохранено в избранное — список открывается кнопкой ★ вверху.",
+    "favRemoved" to "Убрано из избранного.",
+    "favEmpty" to "Пока здесь пусто. Сохранить задачу можно звёздочкой ☆ справа над чертежом.",
+    "favSolved" to "решена",
+    "favCurrent" to "открыта сейчас",
+    "favDelete" to "Удалить",
+    "favOpenTitle" to "Открыть избранную задачу?",
+    "favOpenText" to "Начатое решение текущей задачи пропадёт.",
+    "language" to "Язык",
+    "theme" to "Оформление",
+    "themeSystem" to "Как в системе",
+    "openProblem" to "Задача по номеру",
+    "openProblemHint" to "Номер задачи от учителя или одноклассника",
+    "open" to "Открыть",
+    "share" to "Поделиться задачей",
+    "shareText" to "Попробуй задачу №{n} ({level}) в тренажёре «Статика · балки»: {url}",
+    "removeAds" to "Убрать рекламу",
+    "removeAdsDesc" to "Разовая покупка — реклама исчезнет навсегда, а ты поддержишь развитие.",
+    "restorePurchases" to "Восстановить покупки",
+    "adFree" to "Без рекламы — спасибо за поддержку!",
+    "privacyOptions" to "Согласие на рекламу и конфиденциальность",
+    "privacyPolicy" to "Политика конфиденциальности",
+    "version" to "Версия",
+    "close" to "Закрыть",
+    "systemKeyboard" to "Системная клавиатура",
+    "drawing" to "Чертёж",
+    "genError" to "Не удалось создать задачу — попробуем другую.",
+    "p_badValue" to "Здесь не получается разумное число (например, корень из отрицательного числа или tg 90°).",
+    "p_cut" to "Я исправил запись на «{text}» — продолжай отсюда.",
+    "p_removed" to "Член «{term}» не относится ни к одной силе — я его убрал.",
+    "confirmNewTitle" to "Начать новую задачу?",
+    "confirmNewText" to "Текущее решение будет потеряно.",
+    "cancel" to "Отмена",
+    "p_fixedTerm" to "Я исправил член с [[{s}]] на «{term}» — остальное попробуй дописать сам.",
+    "p_removedSym" to "Я убрал член с [[{s}]] — ему не место в этом уравнении.",
+    "p_dangling" to "После последнего знака чего-то не хватает — допиши член или сотри знак.",
+    "p_qInsteadQ" to "Похоже, для [[{s}]] ты подставил интенсивность q. В силовое уравнение входит равнодействующая [[{s}]] = q · l.",
+    "near" to "Почти! Только округляешь слишком грубо — считай хотя бы до двух знаков после запятой.",
+    "f_rad" to "Так получается, когда калькулятор в режиме RAD (или GRAD). Переключи его на DEG и проверь, что sin 30 = 0,5.",
+    "learnLink" to "Основы: {title}",
+    "learnLinkTrig" to "Тригонометрия: {title}",
+    "learnTitle" to "Основы статики",
+    // --- экскурсия по приложению при первом запуске ---
+    "tourWelcomeTitle" to "Добро пожаловать в тренажёр статики",
+    "tourWelcomeText" to "Здесь ты шаг за шагом научишься находить **реакции опор балок** — так, как это делают в школе. Покажу, что где находится. Это займёт полминуты.",
+    "tourDrawingTitle" to "Условие задачи",
+    "tourDrawingText" to "На чертеже — балка, её опоры и нагрузки (силы, моменты, распределённая нагрузка). Размеры в метрах. Слева вверху — номер задачи: по нему ту же задачу откроет одноклассник или учитель.",
+    "tourStepperTitle" to "Пять шагов решения",
+    "tourStepperText" to "Каждую задачу решаешь в одном порядке: **освобождение** (какие реакции у опор), **нагрузки** (разложение сил), **уравнения** равновесия, **расчёт** реакций и **готово** с результатами. Здесь видно, где ты сейчас.",
+    "tourWorkTitle" to "Здесь ты работаешь",
+    "tourWorkText" to "В этой части выполняешь текущий шаг — отвечаешь, пишешь уравнения и считаешь. Каждый ответ приложение сразу проверяет. Не знаешь — нажми **Подсказка**; после ошибки узнаешь, что не так.",
+    "tourStarTitle" to "Сохранить задачу",
+    "tourStarText" to "Звёздочкой ☆ сохранишь интересную или трудную задачу в избранное и вернёшься к ней позже.",
+    "tourFavoritesTitle" to "Избранные задачи",
+    "tourFavoritesText" to "Здесь список сохранённых задач. Нажми на задачу, чтобы открыть её снова; решённые отмечены.",
+    "tourNewTitle" to "Новая задача",
+    "tourNewText" to "Эта кнопка ↻ даёт другую задачу. Если текущая уже начата, приложение сначала спросит, точно ли её бросить.",
+    "tourLearnTitle" to "Объяснения и задачи",
+    "tourLearnText" to "Под книжкой — короткий интерактивный **курс статики** (9 уроков: сила, момент, опоры, реакции…), **основы тригонометрии** (sin, cos, tg и как ими разложить силу) и **упражнения**. Если в задаче застрял, ссылка приведёт прямо к нужному месту.",
+    "tourSettingsTitle" to "Настройки",
+    "tourSettingsText" to "Здесь выбираешь **сложность** и **типы балок**, язык и светлое или тёмное оформление. Можно открыть задачу по номеру, отправить её другу или отключить рекламу. Здесь же эту экскурсию можно запустить снова.",
+    "tourEndTitle" to "Статика для тебя в новинку?",
+    "tourEndText" to "Тогда начни с короткого курса: 9 уроков, примерно полчаса. Он всегда под значком книжки вверху. А если нет — сразу берись за первую задачу. Удачи!",
+    "tourBack" to "Назад",
+    "tourNext" to "Далее",
+    "tourSkip" to "Пропустить",
+    "tourCount" to "{n} из {of}",
+    "tourRestart" to "Экскурсия по приложению",
+    "firstRunYes" to "Да, покажи основы",
+    "firstRunNo" to "Нет, сразу к задачам",
+    "p_useComp" to "В это уравнение входит составляющая [[{s}]], а не вся наклонная сила [[{F}]].",
+    "v_negM" to "Отрицательное значение [[{u}]] означает, что момент на самом деле вращает в обратную сторону, чем принято.",
+    // --- вход в курсы и ссылка на тригонометрию (правки курса тригонометрии) ---
+    "learnOpen" to "Объяснения и задачи",
+    "trigLink" to "Не дружишь с sin и cos? → Основы тригонометрии",
+)
+
+private val DICTS: Map<Lang, Map<String, String>> = mapOf(Lang.CS to CS + CS_APP, Lang.RU to RU + RU_APP)
+
+/** Klíče všech textů (pro testy úplnosti). */
+fun textKeys(lang: Lang): Set<String> = DICTS.getValue(lang).keys
+
+/** Překlad s proměnnými {x}. Neznámý klíč se vrátí beze změny. */
+class Tr(val lang: Lang) {
+    operator fun invoke(key: String, vararg vars: Pair<String, Any>): String {
+        var s = DICTS.getValue(lang)[key] ?: key
+        for ((k, v) in vars) s = s.replace("{$k}", v.toString())
+        return s
+    }
+}
+
+val LocalTr = staticCompositionLocalOf { Tr(Lang.CS) }

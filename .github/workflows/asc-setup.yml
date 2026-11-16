@@ -1,0 +1,45 @@
+name: App Store Connect setup
+
+# Nastavení vydání přes App Store Connect API (mobile/iosApp/store/tools/asc_setup.py, převzato z Ear4Music2): cena,
+# věkové hodnocení, nákup v aplikaci s lokalizacemi, cenou, dostupností a snímkem pro kontrolu, poznámky pro App Review.
+# `status` jen čte. Jen ručně z karty Actions; nic se neodesílá ke kontrole, kromě příkazu `submit`.
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "status | price-free | age-rating | iap | review-notes | attach-build | submit | cancel-review"
+        required: true
+        default: status
+      build:
+        description: "attach-build: the build number"
+        required: false
+        default: ""
+      products:
+        description: "submit: comma-separated product ids to submit with the version (remove_ads_statika)"
+        required: false
+        default: ""
+
+defaults:
+  run:
+    working-directory: mobile
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PyJWT
+        run: pip install --quiet pyjwt cryptography
+
+      - name: Run
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          API_KEY: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+        run: |
+          echo "$API_KEY" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+          export ASC_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          python3 iosApp/store/tools/asc_setup.py --bundle-id cz.usharik.statika "${{ inputs.command }}" --build "${{ inputs.build }}" --products "${{ inputs.products }}" --notes iosApp/store/review_notes.txt --spec iosApp/store/iap/remove_ads_statika.json
+          rm -f "$RUNNER_TEMP/AuthKey.p8"

@@ -138,8 +138,10 @@ export function StepEquations({ problem: p, onHighlight, onView, onHint, onDone 
     });
   };
 
+  // zvolená (doporučená) část kloubu je první – při stejně dobré shodě vyhraje ona; jinak by nápověda vložila
+  // člen pravé části, kontrola přepnula na levou a další nápověda ho zase smazala (dokola)
   const specsFor = (spec: EqSpec): EqSpec[] =>
-    spec.kind === 'hinge' ? (['left', 'right'] as const).map((side) => ({ ...spec, side })) : [spec];
+    spec.kind === 'hinge' ? [spec, { ...spec, side: spec.side === 'left' ? ('right' as const) : ('left' as const) }] : [spec];
 
   const errorText = (e: NonNullable<ReturnType<typeof parseEquation>['error']>, text: string): string => {
     const ex = `[[${defs.find((d) => d.kind === 'unknown')!.name}]]`;

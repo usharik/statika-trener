@@ -1,0 +1,48 @@
+name: Android
+
+on:
+  push:
+    branches: [main]
+    paths: ['mobile/**', 'src/model/**', '.github/workflows/android.yml']
+  pull_request:
+    paths: ['mobile/**', 'src/model/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # webový generátor a golden.txt aplikace musí sedět (změna src/model/ bez nového golden.txt neprojde)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: GOLDEN=1 npx vitest run src/model/golden.test.ts
+      - run: git diff --exit-code mobile/shared/src/jvmTest/resources/golden.txt
+      # texty obchodů, ID nákupu, privacy manifest a cesty ve workflow (mobile/scripts/check_store.py)
+      - run: pip install --quiet pyyaml && python3 mobile/scripts/check_store.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Testy (model, kroky, shoda s webem)
+        working-directory: mobile
+        run: ./gradlew :shared:jvmTest --console=plain
+      - name: Debug a zkušební release (R8)
+        working-directory: mobile
+        run: ./gradlew :app:assembleDebug :app:assembleRelease -Pstatika.allowTestAds=true --console=plain
+      - uses: actions/upload-artifact@v4
+        with:
+          name: statika-debug-apk
+          path: mobile/app/build/outputs/apk/debug/*.apk

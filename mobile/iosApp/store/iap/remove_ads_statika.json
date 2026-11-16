@@ -1,0 +1,17 @@
+{
+  "productId": "remove_ads_statika",
+  "name": "Remove Ads Statika",
+  "price": "1.99",
+  "reviewNote": "One-time purchase that removes the banner on the result screen and the occasional interstitial between problems. The button \"Odstranit reklamu · price\" (Russian UI: \"Убрать рекламу\") is in Settings (gear icon, top right), with \"Obnovit nákupy\" (Restore purchases) next to it. After the purchase the ads and the button disappear and the settings show \"Bez reklamy – děkujeme za podporu!\".",
+  "screenshot": "settings-remove-ads.png",
+  "localizations": {
+    "cs": {
+      "name": "Bez reklamy",
+      "description": "Natrvalo odstraní reklamu z aplikace Statika."
+    },
+    "ru": {
+      "name": "Без рекламы",
+      "description": "Навсегда убирает рекламу из «Статики»."
+    }
+  }
+}

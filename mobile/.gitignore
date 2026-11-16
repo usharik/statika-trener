@@ -1,0 +1,24 @@
+*.iml
+.gradle
+.kotlin
+local.properties
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild
+.cxx
+google-services.json
+play-key.json
+pc-api-key.json
+vendor/
+.bundle/
+*.jks
+*.keystore
+# klíče a výstupy fastlane / podpisu (setup-github-secrets.sh je čte z disku, do gitu nepatří)
+fastlane/.env
+fastlane/report.xml
+fastlane/README.md
+*.p8
+*.p12
+*.mobileprovision

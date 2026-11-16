@@ -1,0 +1,11 @@
+Statika is a practice app for engineering students: the user computes the support reactions of a randomly generated beam step by step (release the supports, replace loads, write the equilibrium equations, compute the reactions) and the app checks every step. No account or sign-in; problems are generated on the device and work offline (ads need a network). UI languages: Czech and Russian (Settings → Jazyk / Язык).
+
+First launch:
+1. In the EEA/UK/Switzerland Google's consent form (User Messaging Platform) appears. Firebase Analytics and Crashlytics send nothing until consent allows it. The app does NOT use App Tracking Transparency and never reads the advertising identifier; ads are non-personalized for IDFA purposes and limited to the "PG" content rating (users are students).
+2. A dialog "Je pro tebe statika nová?" offers the interactive primer (9 short lessons). "Ne, jdu rovnou počítat" goes straight to a problem.
+
+To try a problem: on step 1 tap the reaction set of support A (e.g. "RAx, RAy – dvě složky síly"), then "Pokračovat"; repeat for the other support, enter the counts and continue. The "Nápověda" (Hint) button helps on every step. Settings (gear) → "Úloha podle čísla" opens a problem by its number.
+
+Settings (gear icon, top right) contain: difficulty, beam types, language, theme, open a problem by number, share, "Odstranit reklamu · price" (in-app purchase remove_ads_statika) with "Obnovit nákupy" (Restore purchases), "Souhlas s reklamou a soukromí" (privacy options, shown where UMP requires it) and "Zásady ochrany osobních údajů", the privacy policy (https://usharik.github.io/statika-trener/privacy.html).
+
+Ads: a banner on the result screen ("Hotovo") and an occasional interstitial after every few solved problems. The one-time purchase removes both.

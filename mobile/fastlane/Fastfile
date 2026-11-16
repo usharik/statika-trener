@@ -1,0 +1,134 @@
+# Stránky aplikace v obchodech: texty, URL, kategorie a snímky. Nic se neodesílá ke kontrole a nenahrává se binárka
+# (buildy jdou přes .github/workflows/testflight.yml a deploy.yml). Převzato z Ear4Music2 (fastlane/Fastfile).
+# Spouštět z adresáře mobile/.
+#
+# App Store – klíč ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH (.p8 klíče App Store Connect API) v prostředí
+# nebo v fastlane/.env (je v .gitignore):
+#   fastlane ios listing                         # vše (texty iosApp/store/metadata, snímky iosApp/store/screenshots)
+#   fastlane ios listing skip_screenshots:true   # jen texty
+#   fastlane ios listing skip_metadata:true      # jen snímky (deliver po textech první verze končí „No data“, fastlane#20538)
+#   fastlane ios privacy                         # štítek App Privacy z app_privacy_details.json (Apple ID + 2FA)
+#
+platform :ios do
+  lane :listing do |options|
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_filepath: ENV.fetch("ASC_KEY_PATH"),
+      duration: 1200,
+    )
+    deliver(
+      api_key: api_key,
+      app_identifier: "cz.usharik.statika",
+      app_version: (options[:version] || File.read(File.expand_path("../VERSION", __dir__)).strip).to_s,
+      skip_screenshots: options[:skip_screenshots] || false,
+      skip_metadata: options[:skip_metadata] || false,
+      platform: "ios",
+      metadata_path: File.expand_path("../iosApp/store/metadata", __dir__),
+      screenshots_path: File.expand_path("../iosApp/store/screenshots", __dir__),
+      skip_binary_upload: true,
+      overwrite_screenshots: true,
+      force: true,
+      run_precheck_before_submit: false,
+      submit_for_review: false,
+      automatic_release: false,
+    )
+  end
+
+  # Štítek App Privacy („nutrition label“) z fastlane/app_privacy_details.json: co sbírá AdMob (vždy, dokud si
+  # uživatel nekoupí „bez reklamy“) a Firebase Analytics + Crashlytics (až po souhlasu). Nic neslouží ke sledování –
+  # aplikace nežádá App Tracking Transparency a IDFA nečte (stejně PrivacyInfo.xcprivacy). Dotazník není ve veřejném
+  # App Store Connect API: lane se přihlásí Apple ID správce (FASTLANE_USER, 2FA v terminálu) a štítek hned zveřejní.
+  lane :privacy do
+    upload_app_privacy_details_to_app_store(
+      username: ENV.fetch("FASTLANE_USER"),
+      app_identifier: "cz.usharik.statika",
+      json_path: File.expand_path("app_privacy_details.json", __dir__),
+      skip_json_file_saving: true,
+    )
+  end
+end
+
+# Google Play – klíč servisního účtu pc-api-key.json (viz Appfile, v .gitignore), podpis a AdMob/Firebase
+# z local.properties (statika.*), app/src/release/google-services.json. Spouštět z mobile/:
+#   bundle exec fastlane android internal                  # testy + podepsaný AAB → interní testování
+#   bundle exec fastlane android internal skip_tests:true
+#   bundle exec fastlane android metadata                  # texty, ikona, feature graphic a snímky (cs-CZ, ru-RU)
+#   bundle exec fastlane android listing                   # jen texty
+PLAY_METADATA = File.expand_path("../docs/google-play/metadata/android", __dir__)
+RELEASE_AAB = File.expand_path("../app/build/outputs/bundle/release/app-release.aab", __dir__)
+PLAY_TRACKS = %w[internal alpha beta production].freeze
+
+def statika_version
+  number = File.read(File.expand_path("../VERSION", __dir__)).strip
+  major, minor = number.split(".").map { |part| Integer(part, 10) }
+  { name: number, code: major * 100 + minor }
+end
+
+platform :android do
+  desc "Testy, podepsaný AAB a nahrání do stopy (výchozí internal). Volby: track:, skip_tests:true"
+  lane :internal do |options|
+    track = (options[:track] || "internal").to_s
+    UI.user_error!("Neznámá stopa #{track}") unless PLAY_TRACKS.include?(track)
+    version = statika_version
+    # Play odmítne už použitý versionCode
+    published = PLAY_TRACKS.flat_map do |name|
+      google_play_track_version_codes(track: name)
+    rescue StandardError
+      []
+    end
+    if (published.max || 0) >= version[:code]
+      UI.user_error!("VERSION #{version[:name]} (kód #{version[:code]}) není vyšší než #{published.max}; zvyš VERSION")
+    end
+
+    gradle(task: ":shared:jvmTest") unless options[:skip_tests]
+    gradle(task: ":app:bundleRelease", print_command: false)
+
+    # distribution/whatsnew/* (stejné jako v deploy.yml) jako poznámky k vydání pro tento versionCode
+    changelogs = File.expand_path("../build/fastlane/metadata", __dir__)
+    FileUtils.rm_rf(changelogs)
+    Dir[File.expand_path("../distribution/whatsnew/whatsnew-*", __dir__)].each do |file|
+      dir = File.join(changelogs, File.basename(file).delete_prefix("whatsnew-"), "changelogs")
+      FileUtils.mkdir_p(dir)
+      FileUtils.cp(file, File.join(dir, "#{version[:code]}.txt"))
+    end
+
+    upload_to_play_store(
+      track: track,
+      release_status: "completed",
+      version_name: version[:name],
+      aab: RELEASE_AAB,
+      metadata_path: changelogs,
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+    )
+    UI.success("Nahráno #{version[:name]} (kód #{version[:code]}) do stopy #{track}")
+  end
+
+  desc "Stránka v obchodě: texty, ikona, feature graphic a snímky (bez binárky a poznámek k vydání)"
+  # supply bere stránku přes vydání ve stopě – musí v ní být aspoň jeden build (nejdřív `android internal`)
+  lane :metadata do
+    upload_to_play_store(
+      track: "internal",
+      metadata_path: PLAY_METADATA,
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_changelogs: true,
+    )
+  end
+
+  desc "Jen texty stránky v obchodě"
+  lane :listing do
+    upload_to_play_store(
+      track: "internal",
+      metadata_path: PLAY_METADATA,
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+    )
+  end
+end

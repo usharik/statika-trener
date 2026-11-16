@@ -43,6 +43,12 @@ Nápovědy nikdy neříkají „špatně“: nejdřív připomenou princip, pak 
 - `src/steps/` – jednotlivé kroky hry
 - `src/i18n.ts` – texty a nápovědy (cs, ru)
 
+## Mobilní aplikace
+
+Android aplikace (Kotlin Multiplatform + Compose, připravená i pro iOS) je v adresáři [`mobile/`](mobile/README.md).
+Generátor úloh je s webem shodný – stejné číslo úlohy dává v obou stejnou úlohu.
+
 ## Nasazení
 
 Každý push do `main` spustí GitHub Actions (`.github/workflows/pages.yml`): testy → build → GitHub Pages.
+Změny v `mobile/` (nebo v `src/model/`) navíc sestaví Android aplikaci a spustí její testy (`.github/workflows/android.yml`).

@@ -1,0 +1,177 @@
+name: TestFlight
+
+# Sestaví podepsanou iOS aplikaci a nahraje ji do App Store Connect, kde se po zpracování objeví v TestFlightu.
+# Převzato z Ear4Music2 (.github/workflows/testflight.yml). Jen ručně (Actions → TestFlight → Run workflow) nebo
+# tagem ios-v<cokoli> (z jakékoli větve). Číslo buildu = číslo běhu, verze = mobile/VERSION (jeden zdroj pravdy
+# s Androidem; přepíše MARKETING_VERSION z mobile/iosApp/project.yml).
+on:
+  workflow_dispatch:
+  push:
+    tags: [ 'ios-v*' ]
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: mobile
+
+jobs:
+  upload:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('mobile/gradle/libs.versions.toml') }}
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # Certifikát Apple Distribution v jednorázové klíčence, profil App Store tam, kde ho Xcode hledá,
+      # a klíč App Store Connect API pro nahrání.
+      - name: Signing
+        env:
+          P12: ${{ secrets.IOS_DIST_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          PROFILE: ${{ secrets.IOS_APPSTORE_PROFILE_BASE64 }}
+          API_KEY: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          for v in P12 P12_PASSWORD PROFILE API_KEY ASC_KEY_ID; do
+            [ -n "${!v}" ] || { echo "::error::secret for $v is not set (see mobile/setup-github-secrets.sh)"; exit 1; }
+          done
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/dist.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          PROFILES="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES"
+          echo "$PROFILE" | base64 --decode > "$RUNNER_TEMP/appstore.mobileprovision"
+          UUID=$(security cms -D -i "$RUNNER_TEMP/appstore.mobileprovision" | plutil -extract UUID raw -)
+          NAME=$(security cms -D -i "$RUNNER_TEMP/appstore.mobileprovision" | plutil -extract Name raw -)
+          [ "$NAME" = "Statika App Store" ] || { echo "::error::the profile is \"$NAME\", project.yml expects \"Statika App Store\""; exit 1; }
+          cp "$RUNNER_TEMP/appstore.mobileprovision" "$PROFILES/$UUID.mobileprovision"
+          echo "$API_KEY" | base64 --decode > "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+
+      # Povinné: štítek App Privacy a zásady ochrany soukromí popisují build s Firebase, build bez něj tedy
+      # nesmí do App Store Connect (ios.yml jen varuje).
+      - name: Firebase config
+        env:
+          PLIST: ${{ secrets.IOS_GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
+        run: |
+          if [ -z "$PLIST" ]; then
+            echo "::error::IOS_GOOGLE_SERVICE_INFO_PLIST_BASE64 secret is not set (the iOS app's GoogleService-Info.plist, base64)"
+            exit 1
+          fi
+          echo "$PLIST" | base64 --decode > iosApp/Statika/GoogleService-Info.plist
+          plutil -lint iosApp/Statika/GoogleService-Info.plist
+          # tajemství musí patřit téhle aplikaci, ne jiné (stejný název tajemství existuje i jinde)
+          BUNDLE=$(plutil -extract BUNDLE_ID raw iosApp/Statika/GoogleService-Info.plist)
+          PROJECT=$(plutil -extract PROJECT_ID raw iosApp/Statika/GoogleService-Info.plist)
+          echo "Firebase config: project $PROJECT, bundle id $BUNDLE"
+          if [ "$BUNDLE" != "cz.usharik.statika" ]; then
+            echo "::error::GoogleService-Info.plist is for bundle id $BUNDLE, not cz.usharik.statika"
+            exit 1
+          fi
+
+      - name: Privacy manifest
+        run: python3 iosApp/store/tools/lint_privacy_manifest.py iosApp/Statika/PrivacyInfo.xcprivacy
+
+      # Release s REPLACE by běžel bez reklamy (AdMobBridge.ifAvailable() = nil) – do obchodu takový build nepatří.
+      - name: AdMob ids
+        run: |
+          if grep -E '^\s*ADMOB_(APP|BANNER|INTERSTITIAL)_ID: *REPLACE' iosApp/project.yml; then
+            echo "::error::mobile/iosApp/project.yml still has the AdMob placeholders (Release ADMOB_* settings)"
+            exit 1
+          fi
+
+      - name: Archive
+        run: |
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          echo "Version $VERSION, build ${{ github.run_number }}"
+          (cd iosApp && xcodegen generate)
+          xcodebuild archive \
+            -project iosApp/Statika.xcodeproj \
+            -scheme Statika \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Statika.xcarchive" \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }}
+
+      # Neplatný privacy manifest App Store Connect odmítne až po nahrání (ITMS-91064, TN3181): kontrola archivu předem.
+      # Tracking = true potřebuje domény, domény potřebují tracking = true. Aplikace nežádá App Tracking Transparency,
+      # proto NSUserTrackingUsageDescription mít nesmí (na rozdíl od Ear4Music).
+      - name: Check privacy manifests
+        run: |
+          APP="$RUNNER_TEMP/Statika.xcarchive/Products/Applications/Statika.app"
+          test -f "$APP/PrivacyInfo.xcprivacy" || { echo "::error::the app has no PrivacyInfo.xcprivacy"; exit 1; }
+          fail=0
+          while IFS= read -r m; do
+            plutil -lint "$m" > /dev/null || { echo "::error::$m is malformed"; fail=1; continue; }
+            t=$(plutil -extract NSPrivacyTracking raw "$m" 2>/dev/null || echo absent)
+            n=$(plutil -extract NSPrivacyTrackingDomains raw "$m" 2>/dev/null || echo 0)
+            if [ "$t" = true ] && [ "$n" = 0 ]; then echo "::error::$m: NSPrivacyTracking true without domains (ITMS-91064)"; fail=1; fi
+            if [ "$t" != true ] && [ "$n" != 0 ]; then echo "::error::$m: tracking domains without NSPrivacyTracking true (ITMS-91064)"; fail=1; fi
+          done < <(find "$APP" -name PrivacyInfo.xcprivacy)
+          if plutil -extract NSUserTrackingUsageDescription raw "$APP/Info.plist" > /dev/null 2>&1; then
+            echo "::error::Info.plist has NSUserTrackingUsageDescription, but the app never asks for tracking (App Privacy says no tracking)"; fail=1
+          fi
+          exit $fail
+
+      - name: Upload to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>B7PSU5B367</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict><key>cz.usharik.statika</key><string>Statika App Store</string></dict>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Statika.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      - name: Clean up
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP"/*.p12 "$RUNNER_TEMP"/*.p8 "$RUNNER_TEMP"/*.mobileprovision
+          rm -f iosApp/Statika/GoogleService-Info.plist

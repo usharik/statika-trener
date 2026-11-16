@@ -1,0 +1,20 @@
+{
+  "identifier" : "STATIKA-STOREKIT",
+  "nonRenewingSubscriptions" : [ ],
+  "products" : [
+    {
+      "displayPrice" : "59",
+      "familyShareable" : false,
+      "internalID" : "STATIKA-REMOVE-ADS",
+      "localizations" : [
+        { "description" : "Reklama zmizí natrvalo.", "displayName" : "Bez reklamy", "locale" : "cs" }
+      ],
+      "productID" : "remove_ads_statika",
+      "referenceName" : "Remove Ads Statika",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : { "_developerTeamID" : "B7PSU5B367", "_storefront" : "CZE" },
+  "subscriptionGroups" : [ ],
+  "version" : { "major" : 3, "minor" : 0 }
+}

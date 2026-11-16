@@ -1,0 +1,56 @@
+name: iOS
+
+on:
+  push:
+    branches: [main]
+    paths: ['mobile/**', 'src/model/**', '.github/workflows/ios.yml']
+  pull_request:
+    paths: ['mobile/**', 'src/model/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Sestavení, sdílené testy a UI testy (iPhone + iPad)
+    runs-on: macos-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('mobile/gradle/libs.versions.toml') }}
+      - name: XcodeGen
+        run: brew install xcodegen
+      - name: Nástroje
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes
+      # bez podpisu, pro simulátor; reklamní test potřebuje síť a Google – přeskočit
+      - name: Build and test
+        working-directory: mobile
+        env:
+          SKIP_ADS: '1'
+        run: iosApp/ci.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-screenshots
+          path: |
+            mobile/build/ios/iphone/screenshots/
+            mobile/build/ios/ipad/screenshots/
+            mobile/build/ios/build.log
+          if-no-files-found: warn
+          retention-days: 7

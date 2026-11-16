@@ -1,0 +1,192 @@
+name: Deploy to Google Play
+
+# Podepsaný AAB do Google Play přes servisní účet (převzato z Ear4Music2 .github/workflows/deploy.yml).
+# Jen ručně (Actions → Deploy to Google Play → zvolit stopu), nebo tagem android-v<cokoli> → stopa internal.
+# Verze = mobile/VERSION (versionCode = MAJOR*100 + MINOR – před každým nahráním zvýšit).
+# Release bez skutečných ID AdMob nebo podpisu Gradle odmítne (app/build.gradle.kts), tady se proto předávají vždy.
+on:
+  workflow_dispatch:
+    inputs:
+      track:
+        description: 'Release track'
+        required: true
+        default: 'internal'
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+      release_notes_cs:
+        description: 'Co je nového (čeština, max. 500 znaků)'
+        required: false
+        default: 'Opravy chyb a vylepšení.'
+      release_notes_ru:
+        description: 'Что нового (русский, до 500 символов)'
+        required: false
+        default: 'Исправления ошибок и улучшения.'
+  push:
+    tags:
+      - 'android-v*'
+
+permissions:
+  contents: write  # GitHub release u tagu
+
+concurrency:
+  group: play-deploy
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: mobile
+
+jobs:
+  deploy:
+    name: Deploy to Google Play
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Check secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          FIREBASE_CONFIG_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
+          PLAY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          ADMOB_APP_ID: ${{ secrets.ANDROID_ADMOB_APP_ID }}
+          ADMOB_BANNER_ID: ${{ secrets.ANDROID_ADMOB_BANNER_ID }}
+          ADMOB_INTERSTITIAL_ID: ${{ secrets.ANDROID_ADMOB_INTERSTITIAL_ID }}
+        run: |
+          missing=0
+          for v in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD FIREBASE_CONFIG_JSON PLAY_JSON ADMOB_APP_ID ADMOB_BANNER_ID ADMOB_INTERSTITIAL_ID; do
+            [ -n "${!v}" ] || { echo "::error::secret for $v is not set (see mobile/setup-github-secrets.sh)"; missing=1; }
+          done
+          case "$ADMOB_APP_ID" in ca-app-pub-3940256099942544*) echo "::error::ANDROID_ADMOB_APP_ID is Google's test id"; missing=1;; esac
+          exit $missing
+
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | tr -d ' \r\n\t' | base64 --decode > "$RUNNER_TEMP/release-keystore.jks"
+
+      - name: Validate keystore
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          keytool -list \
+            -keystore "$RUNNER_TEMP/release-keystore.jks" \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS" > /dev/null
+          echo "✅ Keystore is valid"
+
+      # Firebase je povinný: štítek Data safety a zásady soukromí popisují build s Firebase.
+      - name: Decode google-services.json
+        env:
+          FIREBASE_CONFIG_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
+        run: |
+          printf '%s' "$FIREBASE_CONFIG_JSON" > app/google-services.json
+          python3 - <<'PY'
+          import json
+          cfg = json.load(open("app/google-services.json"))
+          names = [c["client_info"]["android_client_info"]["package_name"] for c in cfg["client"]]
+          print("Firebase project", cfg["project_info"]["project_id"], "packages", names)
+          if "cz.usharik.statika" not in names:
+              raise SystemExit("::error::google-services.json has no client for cz.usharik.statika")
+          PY
+
+      - name: Tests
+        run: ./gradlew :shared:jvmTest --no-daemon --console=plain
+
+      - name: Build release AAB
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ADMOB_APP_ID: ${{ secrets.ANDROID_ADMOB_APP_ID }}
+          ADMOB_BANNER_ID: ${{ secrets.ANDROID_ADMOB_BANNER_ID }}
+          ADMOB_INTERSTITIAL_ID: ${{ secrets.ANDROID_ADMOB_INTERSTITIAL_ID }}
+        run: |
+          ./gradlew :app:bundleRelease \
+            -Pstatika.signing.storeFile="$RUNNER_TEMP/release-keystore.jks" \
+            -Pstatika.signing.storePassword="$KEYSTORE_PASSWORD" \
+            -Pstatika.signing.keyAlias="$KEY_ALIAS" \
+            -Pstatika.signing.keyPassword="$KEY_PASSWORD" \
+            -Pstatika.admob.appId="$ADMOB_APP_ID" \
+            -Pstatika.admob.bannerId="$ADMOB_BANNER_ID" \
+            -Pstatika.admob.interstitialId="$ADMOB_INTERSTITIAL_ID" \
+            --no-daemon \
+            --stacktrace
+
+      - name: Determine release track and notes
+        id: release
+        env:
+          NOTES_CS: ${{ inputs.release_notes_cs }}
+          NOTES_RU: ${{ inputs.release_notes_ru }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "track=${{ inputs.track }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "track=internal" >> "$GITHUB_OUTPUT"
+          fi
+          mkdir -p distribution/whatsnew
+          printf '%s\n' "${NOTES_CS:-Opravy chyb a vylepšení.}" > distribution/whatsnew/whatsnew-cs-CZ
+          printf '%s\n' "${NOTES_RU:-Исправления ошибок и улучшения.}" > distribution/whatsnew/whatsnew-ru-RU
+          echo "version=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload AAB to Google Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: cz.usharik.statika
+          releaseFiles: mobile/app/build/outputs/bundle/release/app-release.aab
+          mappingFile: mobile/app/build/outputs/mapping/release/mapping.txt
+          track: ${{ steps.release.outputs.track }}
+          status: completed
+          whatsNewDirectory: mobile/distribution/whatsnew
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-aab
+          path: |
+            mobile/app/build/outputs/bundle/release/app-release.aab
+            mobile/app/build/outputs/mapping/release/mapping.txt
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: mobile/app/build/outputs/bundle/release/app-release.aab
+          body: |
+            ## Android ${{ github.ref_name }} (verze ${{ steps.release.outputs.version }})
+
+            Nahráno do Google Play, stopa ${{ steps.release.outputs.track }}.
+
+            - Build: ${{ github.run_number }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release-keystore.jks" app/google-services.json
