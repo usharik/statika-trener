@@ -3,15 +3,20 @@ package cz.usharik.statika.platform
 import android.app.Activity
 import android.app.Application
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import androidx.compose.ui.graphics.Canvas
+import androidx.core.content.FileProvider
 import com.google.firebase.FirebaseApp
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import cz.usharik.statika.BuildConfig
+import java.io.File
 import java.lang.ref.WeakReference
 
 /** Aktuální Activity pro nákupní dialog, reklamu a sdílení. */
@@ -34,8 +39,9 @@ object CurrentActivity : Application.ActivityLifecycleCallbacks {
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
 }
 
-class PrefsStore(context: Context) : KeyValueStore {
-    private val prefs = context.getSharedPreferences("statika", Context.MODE_PRIVATE)
+/** [name] = soubor SharedPreferences; do zálohy jde jen „statika“ (res/xml/backup_rules.xml, data_extraction_rules.xml). */
+class PrefsStore(context: Context, name: String = "statika") : KeyValueStore {
+    private val prefs = context.getSharedPreferences(name, Context.MODE_PRIVATE)
     override fun getString(key: String): String? = prefs.getString(key, null)
     override fun getInt(key: String, default: Int): Int = prefs.getInt(key, default)
     override fun putString(key: String, value: String?) = prefs.edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
@@ -97,6 +103,36 @@ class AndroidPlatform(private val context: Context) : PlatformServices {
     }
 
     override fun openUrl(url: String) = start(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+
+    /** Stránky se kreslí přímo do plátna PdfDocument – text i výkres zůstanou vektorové. */
+    override fun sharePdf(doc: PdfDoc) {
+        val pdf = PdfDocument()
+        val file = try {
+            doc.pages.indices.forEach { i ->
+                val page = pdf.startPage(PdfDocument.PageInfo.Builder(PdfDoc.WIDTH.toInt(), PdfDoc.HEIGHT.toInt(), i + 1).create())
+                doc.drawPage(i, Canvas(page.canvas), 1f)
+                pdf.finishPage(page)
+            }
+            // v cache drží jen poslední export
+            val dir = File(context.cacheDir, "pdf").apply { mkdirs() }
+            dir.listFiles()?.forEach { it.delete() }
+            File(dir, doc.fileName).also { f -> f.outputStream().use(pdf::writeTo) }
+        } catch (e: Exception) {
+            Log.w("Statika", "PDF se nepodařilo vytvořit", e)
+            return
+        } finally {
+            pdf.close()
+        }
+        val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
+        val send = Intent(Intent.ACTION_SEND)
+            .setType("application/pdf")
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .putExtra(Intent.EXTRA_TITLE, doc.title)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // ClipData: náhled v systémovém výběru a předání oprávnění ke čtení i přes chooser
+        send.clipData = ClipData.newRawUri(doc.title, uri)
+        start(Intent.createChooser(send, doc.title))
+    }
 
     private fun start(intent: Intent) {
         val a = CurrentActivity.activity

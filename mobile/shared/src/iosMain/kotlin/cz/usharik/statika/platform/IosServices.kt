@@ -8,13 +8,28 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitView
+import androidx.compose.ui.graphics.asSkiaBitmap
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.useContents
+import kotlinx.cinterop.usePinned
+import org.jetbrains.skia.EncodedImageFormat
+import org.jetbrains.skia.Image
+import platform.CoreGraphics.CGRectMake
+import platform.Foundation.NSData
+import platform.Foundation.NSMutableData
+import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
+import platform.Foundation.dataWithBytes
+import platform.Foundation.writeToURL
 import platform.Foundation.NSUserDefaults
 import androidx.compose.ui.uikit.LocalUIViewController
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
+import platform.UIKit.UIGraphicsBeginPDFContextToData
+import platform.UIKit.UIGraphicsBeginPDFPage
+import platform.UIKit.UIGraphicsEndPDFContext
+import platform.UIKit.UIImage
 import platform.UIKit.UIViewController
 import platform.UIKit.popoverPresentationController
 
@@ -88,9 +103,28 @@ internal class IosAdsSdk(private val bridge: IosAdsBridge) : AdsSdk {
 class IosPlatformServices : PlatformServices {
     override val versionName: String = versionLabel(IOS_VERSION_NAME, IOS_GIT_HASH)
 
-    override fun shareText(text: String) {
+    override fun shareText(text: String) = share(listOf(text))
+
+    /** Compose na iOS kreslí přes Skiu bez PDF výstupu – stránky jdou do PDF jako obrázky 3× (cca 216 dpi). */
+    override fun sharePdf(doc: PdfDoc) {
+        val bounds = CGRectMake(0.0, 0.0, PdfDoc.WIDTH.toDouble(), PdfDoc.HEIGHT.toDouble())
+        val data = NSMutableData()
+        UIGraphicsBeginPDFContextToData(data, bounds, null)
+        for (i in doc.pages.indices) {
+            UIGraphicsBeginPDFPage()
+            val png = Image.makeFromBitmap(doc.rasterize(i, 3f).asSkiaBitmap()).encodeToData(EncodedImageFormat.PNG)?.bytes ?: continue
+            val bytes = png.usePinned { NSData.dataWithBytes(it.addressOf(0), png.size.toULong()) }
+            UIImage.imageWithData(bytes)?.drawInRect(bounds)
+        }
+        UIGraphicsEndPDFContext()
+        val url = NSURL.fileURLWithPath(NSTemporaryDirectory() + doc.fileName)
+        if (!data.writeToURL(url, atomically = true)) return
+        share(listOf(url))
+    }
+
+    private fun share(items: List<Any>) {
         val vc = topViewController() ?: return
-        val share = UIActivityViewController(listOf(text), null)
+        val share = UIActivityViewController(items, null)
         // na iPadu se sdílení ukazuje jako popover – bez kotvy by aplikace spadla
         share.popoverPresentationController?.let { pop ->
             pop.sourceView = vc.view

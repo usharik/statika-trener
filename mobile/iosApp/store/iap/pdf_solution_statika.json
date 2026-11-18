@@ -1,0 +1,17 @@
+{
+  "productId": "pdf_solution_statika",
+  "name": "PDF Solution Statika",
+  "type": "CONSUMABLE",
+  "price": "0.99",
+  "reviewNote": "Consumable: one download of the current problem as a PDF with the full worked solution (the problem statement alone is free). Tap the page icon next to the star above the beam drawing on the main screen, then \"Zadání s řešením · price\" (Russian UI: \"Условие с решением\"). After the payment the PDF is generated and the system share sheet opens. Every download with the solution is a new purchase.",
+  "localizations": {
+    "cs": {
+      "name": "PDF s řešením",
+      "description": "Jedno stažení úlohy jako PDF s celým řešením."
+    },
+    "ru": {
+      "name": "PDF с решением",
+      "description": "Одно скачивание задачи с решением в PDF."
+    }
+  }
+}

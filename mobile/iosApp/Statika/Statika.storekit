@@ -1,20 +1,45 @@
 {
   "identifier" : "STATIKA-STOREKIT",
-  "nonRenewingSubscriptions" : [ ],
+  "nonRenewingSubscriptions" : [],
   "products" : [
     {
       "displayPrice" : "59",
       "familyShareable" : false,
       "internalID" : "STATIKA-REMOVE-ADS",
       "localizations" : [
-        { "description" : "Reklama zmizí natrvalo.", "displayName" : "Bez reklamy", "locale" : "cs" }
+        {
+          "description" : "Reklama zmizí natrvalo.",
+          "displayName" : "Bez reklamy",
+          "locale" : "cs"
+        }
       ],
       "productID" : "remove_ads_statika",
       "referenceName" : "Remove Ads Statika",
       "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "29",
+      "familyShareable" : false,
+      "internalID" : "STATIKA-PDF-SOLUTION",
+      "localizations" : [
+        {
+          "description" : "Jedno stažení PDF úlohy s celým řešením.",
+          "displayName" : "PDF s řešením",
+          "locale" : "cs"
+        }
+      ],
+      "productID" : "pdf_solution_statika",
+      "referenceName" : "PDF Solution Statika",
+      "type" : "Consumable"
     }
   ],
-  "settings" : { "_developerTeamID" : "B7PSU5B367", "_storefront" : "CZE" },
-  "subscriptionGroups" : [ ],
-  "version" : { "major" : 3, "minor" : 0 }
+  "settings" : {
+    "_developerTeamID" : "B7PSU5B367",
+    "_storefront" : "CZE"
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
 }

@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.clickable
@@ -206,6 +207,7 @@ private fun Trainer(graph: AppGraph, settings: SettingsRepository) {
     val snack = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showFavorites by remember { mutableStateOf(false) }
+    var askPdf by remember { mutableStateOf(false) }
 
     val events = remember(problem) {
         val o = opts
@@ -282,7 +284,7 @@ private fun Trainer(graph: AppGraph, settings: SettingsRepository) {
 
         val drawing: @Composable () -> Unit = {
             Box(Modifier.dismissKeyboardOnTap()) {
-                DrawingCard(session, problem, compactDrawing, attempt, favorites.isFavorite(problem.seed, opts), ::toggleFavorite)
+                DrawingCard(session, problem, compactDrawing, attempt, favorites.isFavorite(problem.seed, opts), ::toggleFavorite, onPdf = { askPdf = true })
             }
         }
         val content: @Composable () -> Unit = {
@@ -369,6 +371,45 @@ private fun Trainer(graph: AppGraph, settings: SettingsRepository) {
         )
     }
 
+    // PDF: zadání zdarma, řešení placené za každé stažení (po zaplacení se PDF vytvoří samo)
+    val fonts = LocalFontFamilyResolver.current
+    fun sharePdf(p: Problem, level: Int, withSolution: Boolean) {
+        graph.analytics.event("pdf_export", mapOf("level" to level, "solution" to withSolution.toString()))
+        graph.platform.sharePdf(problemPdf(p, level, withSolution, tr, pdfTextMeasurer(fonts)))
+    }
+    var pendingPdf by remember { mutableStateOf<Pair<Problem, Int>?>(null) }
+    val pdfCredits by graph.billing.exportCredits.collectAsState()
+    val pdfBusy by graph.billing.exportBusy.collectAsState()
+    LaunchedEffect(pdfCredits, pendingPdf) {
+        val (p, level) = pendingPdf ?: return@LaunchedEffect
+        if (pdfCredits > 0 && graph.billing.takeExportCredit()) {
+            pendingPdf = null
+            sharePdf(p, level, true)
+        }
+    }
+    LaunchedEffect(pdfBusy) {
+        // platba skončila bez zaplacení (zrušení, chyba, čekající platba)
+        if (!pdfBusy && pendingPdf != null && graph.billing.exportCredits.value == 0) {
+            pendingPdf = null
+            snack.currentSnackbarData?.dismiss()
+            snack.showSnackbar(tr("pdfNotPaid"), duration = SnackbarDuration.Short)
+        }
+    }
+    if (askPdf) PdfExportDialog(
+        price = graph.billing.exportPrice.collectAsState().value,
+        credits = pdfCredits,
+        onDismiss = { askPdf = false },
+        onTask = {
+            askPdf = false
+            sharePdf(problem, opts.level, false)
+        },
+        onSolution = {
+            askPdf = false
+            pendingPdf = problem to opts.level
+            if (pdfCredits == 0) graph.billing.purchaseExport()
+        },
+    )
+
     val tour = LocalTour.current
     if (showSettings) SettingsSheet(graph, settings, problem, opts.level, onDismiss = { showSettings = false }, onOpen = { n ->
         seed = n
@@ -438,7 +479,7 @@ private fun Stepper(step: Int, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun DrawingCard(session: TrainerSession, problem: Problem, compact: Boolean, attempt: Int, favorite: Boolean, onFavorite: () -> Unit) {
+private fun DrawingCard(session: TrainerSession, problem: Problem, compact: Boolean, attempt: Int, favorite: Boolean, onFavorite: () -> Unit, onPdf: () -> Unit) {
     val tr = LocalTr.current
     val c = LocalColors.current
     Surface(shape = CardShape, color = c.paper, border = BorderStroke(1.dp, c.line), modifier = Modifier.fillMaxWidth().tourSpot(TourSpot.DRAWING)) {
@@ -449,6 +490,13 @@ private fun DrawingCard(session: TrainerSession, problem: Problem, compact: Bool
                     style = MaterialTheme.typography.bodySmall, color = c.inkSoft, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Text(tr("lengthsNote"), style = MaterialTheme.typography.bodySmall, color = c.inkSoft)
+                // PDF úlohy (zadání / s řešením) – přímo u výkresu, ať se nemusí hledat v nastavení
+                Box(
+                    Modifier.padding(start = 6.dp).size(36.dp).clip(CircleShape)
+                        .clickable(onClickLabel = tr("pdfExport"), onClick = onPdf)
+                        .semantics { contentDescription = tr("pdfExport") },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(PdfIcon, contentDescription = null, tint = c.ink, modifier = Modifier.size(22.dp)) }
                 // hvězdička vpravo v záhlaví výkresu – uložit do oblíbených
                 Box(
                     Modifier.padding(start = 6.dp).size(36.dp).tourSpot(TourSpot.STAR).clip(CircleShape)
@@ -599,6 +647,65 @@ private val BookIcon: ImageVector by lazy {
             verticalLineTo(19f)
             curveTo(18.2f, 18.3f, 15f, 18.7f, 13f, 20f)
             close()
+        }
+    }.build()
+}
+
+/** Volba obsahu PDF: zadání zdarma, s řešením za poplatek (nebo z už zaplaceného stažení). */
+@Composable
+private fun PdfExportDialog(price: String?, credits: Int, onDismiss: () -> Unit, onTask: () -> Unit, onSolution: () -> Unit) {
+    val tr = LocalTr.current
+    val c = LocalColors.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("pdfExportTitle")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(tr("pdfExportText"), color = c.inkSoft)
+                SecondaryButton(tr("pdfOnlyTask"), onTask, Modifier.fillMaxWidth())
+                PrimaryButton(
+                    tr("pdfWithSolution") + when {
+                        credits > 0 -> ""
+                        price != null -> " · $price"
+                        else -> ""
+                    },
+                    onSolution, Modifier.fillMaxWidth(),
+                )
+                Text(
+                    if (credits > 0) tr("pdfPaidLeft", "n" to credits) else tr("pdfSolutionPaid"),
+                    style = MaterialTheme.typography.bodySmall, color = c.inkSoft,
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("cancel")) } },
+    )
+}
+
+/** List papíru s ohnutým rohem – export úlohy do PDF. */
+private val PdfIcon: ImageVector by lazy {
+    ImageVector.Builder("Pdf", 24.dp, 24.dp, 24f, 24f).apply {
+        path(fill = SolidColor(Color.Black), pathFillType = androidx.compose.ui.graphics.PathFillType.EvenOdd) {
+            // obrys listu
+            moveTo(5f, 2f)
+            horizontalLineTo(14.5f)
+            lineTo(20f, 7.5f)
+            verticalLineTo(22f)
+            horizontalLineTo(5f)
+            close()
+            // vnitřek (díra) s ohnutým rohem
+            moveTo(7f, 4f)
+            verticalLineTo(20f)
+            horizontalLineTo(18f)
+            verticalLineTo(9f)
+            horizontalLineTo(13f)
+            verticalLineTo(4f)
+            close()
+        }
+        // řádky textu
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(9f, 12f); horizontalLineTo(16f); verticalLineTo(13.6f); horizontalLineTo(9f); close()
+            moveTo(9f, 15.5f); horizontalLineTo(16f); verticalLineTo(17.1f); horizontalLineTo(9f); close()
         }
     }.build()
 }

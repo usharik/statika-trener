@@ -3,6 +3,7 @@ package cz.usharik.statika.platform
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -81,6 +82,21 @@ interface Billing {
 
     /** Aplikace je na popředí: tiše ověřit vlastnictví (čekající platba dokončená, vrácení peněz). */
     fun onForeground() {}
+
+    /** Cena jednoho stažení PDF s řešením, null dokud není známa. */
+    val exportPrice: StateFlow<String?>
+
+    /** Zaplacená a dosud nevyužitá stažení PDF s řešením. */
+    val exportCredits: StateFlow<Int>
+
+    /** Probíhá nákup stažení (od otevření platby do zaplacení / zrušení). */
+    val exportBusy: StateFlow<Boolean>
+
+    /** Zaplatit jedno stažení PDF s řešením; po zaplacení přibude [exportCredits]. */
+    fun purchaseExport()
+
+    /** Odečte jedno zaplacené stažení; false, když žádné není. */
+    fun takeExportCredit(): Boolean
 }
 
 class FakeBilling(adFree: Boolean = false) : Billing {
@@ -90,6 +106,35 @@ class FakeBilling(adFree: Boolean = false) : Billing {
         isAdFree.value = true
     }
     override fun restorePurchases() = Unit
+
+    override val exportPrice: StateFlow<String?> = MutableStateFlow(null)
+    override val exportCredits = MutableStateFlow(0)
+    override val exportBusy: StateFlow<Boolean> = MutableStateFlow(false)
+
+    /** bez obchodu (testy, náhledy) se „zaplatí“ hned */
+    override fun purchaseExport() {
+        exportCredits.value += 1
+    }
+
+    override fun takeExportCredit(): Boolean {
+        if (exportCredits.value <= 0) return false
+        exportCredits.value -= 1
+        return true
+    }
+}
+
+/**
+ * Dokument PDF ze stránek A4 ([WIDTH] × [HEIGHT] bodů, 1 bod = 1/72″), které kreslí společný kód;
+ * [fileName] je název souboru včetně přípony .pdf. Stránka se kreslí v jemnějších jednotkách
+ * ([SCALE] na bod, hustota DrawScope = [SCALE]) – při malých velikostech písma by Android zaokrouhloval
+ * šířky znaků a text by byl nerovnoměrně proložený. Kreslit stránku přes [drawPage].
+ */
+class PdfDoc(val fileName: String, val title: String, val pages: List<DrawScope.() -> Unit>) {
+    companion object {
+        const val WIDTH = 595f
+        const val HEIGHT = 842f
+        const val SCALE = 4f
+    }
 }
 
 /** Co se liší mezi Androidem a iOS pod společným UI. */
@@ -97,6 +142,9 @@ interface PlatformServices {
     val versionName: String
     fun shareText(text: String)
     fun openUrl(url: String)
+
+    /** Uloží PDF do dočasného souboru a nabídne ho systémovým sdílením (uložit, tisk, poslat). */
+    fun sharePdf(doc: PdfDoc) {}
 }
 
 object NoPlatform : PlatformServices {

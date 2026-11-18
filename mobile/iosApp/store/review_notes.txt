@@ -9,3 +9,5 @@ To try a problem: on step 1 tap the reaction set of support A (e.g. "RAx, RAy �
 Settings (gear icon, top right) contain: difficulty, beam types, language, theme, open a problem by number, share, "Odstranit reklamu · price" (in-app purchase remove_ads_statika) with "Obnovit nákupy" (Restore purchases), "Souhlas s reklamou a soukromí" (privacy options, shown where UMP requires it) and "Zásady ochrany osobních údajů", the privacy policy (https://usharik.github.io/statika-trener/privacy.html).
 
 Ads: a banner on the result screen ("Hotovo") and an occasional interstitial after every few solved problems. The one-time purchase removes both.
+
+PDF export: the page icon next to the star (above the beam drawing on the main screen) exports the current problem as a PDF. "Jen zadání" (problem statement only) is free; "Zadání s řešením · price" (statement with the full worked solution) is the consumable in-app purchase pdf_solution_statika – every download with the solution is a new purchase. After the payment the PDF is generated and the system share sheet opens (save to Files, print, send).

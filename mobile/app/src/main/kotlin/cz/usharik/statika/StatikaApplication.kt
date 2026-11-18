@@ -22,7 +22,8 @@ class StatikaApplication : Application() {
         val store = PrefsStore(this)
         migrateLegacyAdFree(this, store)
         val analytics = firebaseAnalytics(this)
-        val billing = SharedBilling(PlayBillingSdk(this), store, analytics)
+        // zaplacená stažení PDF mimo zálohu: obnovením staré zálohy by se nevyužitá platba dala použít znovu
+        val billing = SharedBilling(PlayBillingSdk(this), store, analytics, purchases = PrefsStore(this, "statika_purchases"))
         graph = AppGraph(
             store = store,
             analytics = analytics,

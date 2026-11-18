@@ -101,6 +101,14 @@ private class FakeBillingSdk : BillingSdk {
     override fun refresh() {
         refreshes++
     }
+    var exportPurchases = 0
+    val consumed = mutableListOf<String>()
+    override fun purchaseExport() {
+        exportPurchases++
+    }
+    override fun consumeExport(token: String) {
+        consumed += token
+    }
 }
 
 class ConsentTest {
@@ -325,6 +333,56 @@ class SharedBillingTest {
     private val analytics = RecordingAnalytics()
     private val store = InMemoryKeyValueStore()
     private val sdk = FakeBillingSdk()
+
+    @Test
+    fun pdfSeZaplatiZapocteJednouASpotrebuje() {
+        val b = SharedBilling(sdk, store, analytics)
+        assertFalse(b.takeExportCredit())
+        b.purchaseExport()
+        assertTrue(b.exportBusy.value)
+        assertEquals(1, sdk.exportPurchases)
+        sdk.listener!!.onExportPaid("t1")
+        sdk.listener!!.onExportPaid("t1") // stejná platba nahlášená znovu (refresh před spotřebováním)
+        assertFalse(b.exportBusy.value)
+        assertEquals(1, b.exportCredits.value)
+        assertEquals(listOf("t1", "t1"), sdk.consumed)
+        assertEquals(listOf("pdf_purchase_started", "pdf_purchased"), analytics.events)
+        assertTrue(b.takeExportCredit())
+        assertFalse(b.takeExportCredit()) // každé stažení zvlášť
+    }
+
+    @Test
+    fun zaplaceneStazeniPrezijeRestartAPlatbaSeNezapoctePodruhe() {
+        val b = SharedBilling(sdk, store, analytics)
+        sdk.listener!!.onExportPaid("t1")
+        val sdk2 = FakeBillingSdk()
+        val b2 = SharedBilling(sdk2, store, analytics)
+        assertEquals(1, b2.exportCredits.value)
+        sdk2.listener!!.onExportPaid("t1") // nespotřebovaná platba po restartu
+        assertEquals(1, b2.exportCredits.value)
+        assertEquals(listOf("t1"), sdk2.consumed)
+        assertTrue(b.exportCredits.value == 1)
+    }
+
+    @Test
+    fun zaplaceneStazeniJeVOddelenemUlozisti() {
+        val purchases = InMemoryKeyValueStore()
+        val b = SharedBilling(sdk, store, analytics, purchases)
+        sdk.listener!!.onExportPaid("t1")
+        assertEquals(1, purchases.getInt(SharedBilling.K_EXPORT_CREDITS, 0))
+        assertEquals(0, store.getInt(SharedBilling.K_EXPORT_CREDITS, 0)) // hlavní (zálohované) úložiště nic
+        assertTrue(b.takeExportCredit())
+    }
+
+    @Test
+    fun zrusenaPlatbaZaPdfNicNepripise() {
+        val b = SharedBilling(sdk, store, analytics)
+        b.purchaseExport()
+        sdk.listener!!.onExportPurchaseFinished(false)
+        assertFalse(b.exportBusy.value)
+        assertEquals(0, b.exportCredits.value)
+        assertFalse(b.isAdFree.value)
+    }
 
     @Test
     fun ulozenyStavPlatiHnedPoStartu() {

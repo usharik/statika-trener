@@ -40,6 +40,17 @@
             </intent-filter>
         </activity>
 
+        <!-- PDF úlohy pro sdílení – jen soubory z cache/pdf -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- Firebase Analytics nic neukládá ani neposílá, dokud uživatel nevyjádří souhlas (UMP) -->
         <meta-data android:name="google_analytics_default_allow_analytics_storage" android:value="false" />
         <meta-data android:name="google_analytics_default_allow_ad_storage" android:value="false" />

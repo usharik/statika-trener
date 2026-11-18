@@ -21,7 +21,7 @@ a upravená na tuto aplikaci; při změně tam stojí za to porovnat obě.
 5. **Tajemství GitHubu**: `./setup-github-secrets.sh` (z `mobile/`, nejdřív bez parametrů – vypíše, co chybí),
    pak `./setup-github-secrets.sh --apply ios`.
 6. **App Store Connect setup** (Actions → *App Store Connect setup*), postupně příkazy:
-   `status` → `price-free` → `age-rating` → `iap` (nákup `remove_ads_statika` z `iap/remove_ads_statika.json`
+   `status` → `price-free` → `age-rating` → `iap` (nákup `remove_ads_statika` z `iap/remove_ads_statika.json`, spotřební `pdf_solution_statika` z `iap/pdf_solution_statika.json`
    s lokalizacemi, cenou, dostupností a snímkem `iap/settings-remove-ads.png`) → `review-notes`.
 7. **TestFlight** (Actions → *TestFlight*, nebo tag `ios-v<cokoli>`): build číslo = číslo běhu, verze = `mobile/VERSION`.
 8. **Snímky** (Actions → *iOS store screenshots*, nebo tag `ios-screenshots<cokoli>`): artefakt rozbalit do

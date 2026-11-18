@@ -8,6 +8,7 @@ import com.android.billingclient.api.BillingClient.ProductType
 import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.BillingResult
+import com.android.billingclient.api.ConsumeParams
 import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
@@ -15,17 +16,22 @@ import com.android.billingclient.api.QueryProductDetailsParams
 import com.android.billingclient.api.QueryPurchasesParams
 
 /**
- * Google Play Billing pro jednorázový produkt „bez reklamy“ – jen volání SDK. Uložený stav, analytika
- * a pravidla nákupu jsou ve společném [SharedBilling].
- * - Při každém připojení a návratu do aplikace ([refresh]) se vlastněné nákupy ověří znovu
- *   (vrácení peněz → reklama zpět, čekající platba dokončená mimo aplikaci → bez reklamy).
- * - Nákupy se potvrzují (jinak je Play po třech dnech vrátí).
+ * Google Play Billing – jen volání SDK. Uložený stav, analytika a pravidla nákupu jsou ve společném [SharedBilling].
+ * - „bez reklamy“ (jednorázový): při každém připojení a návratu do aplikace ([refresh]) se vlastnictví ověří znovu
+ *   (vrácení peněz → reklama zpět, čekající platba dokončená mimo aplikaci → bez reklamy); nákup se potvrzuje
+ *   (jinak ho Play po třech dnech vrátí).
+ * - PDF s řešením (spotřební): zaplacený nákup se ohlásí [BillingListener.onExportPaid] a spotřebuje se až
+ *   v [consumeExport]; nespotřebované platby se při připojení a návratu do aplikace najdou znovu.
  */
 class PlayBillingSdk(context: Context) : BillingSdk {
     private var listener: BillingListener? = null
 
     @Volatile
-    private var details: ProductDetails? = null
+    private var details: Map<String, ProductDetails> = emptyMap()
+
+    /** produkt, jehož nákup je právě otevřený (zrušení z Play neříká, o který šlo) */
+    @Volatile
+    private var inFlight: String? = null
 
     private val client: BillingClient = BillingClient.newBuilder(context)
         .setListener { result, purchases -> onPurchasesUpdated(result, purchases) }
@@ -38,37 +44,56 @@ class PlayBillingSdk(context: Context) : BillingSdk {
         connect()
     }
 
-    /** Připojení k Play; [then] se spustí po úspěšném připojení (např. nákup po prvním neúspěšném startu bez sítě). */
+    /** Připojení k Play; [then] se spustí po připojení a načtení produktů (i neúspěšném), např. nákup po startu bez sítě. */
     private fun connect(then: () -> Unit = {}) {
         client.startConnection(object : BillingClientStateListener {
             override fun onBillingSetupFinished(result: BillingResult) {
                 if (result.responseCode == BillingResponseCode.OK) {
                     queryDetails(then)
                     queryOwned()
-                }
+                } else onMain(then) // bez Play: čekající nákup se ukončí jako neúspěšný
             }
             override fun onBillingServiceDisconnected() = Unit
         })
     }
 
-    override fun purchase() {
-        if (details == null) {
-            // první spuštění bez sítě: připojit, načíst produkt a teprve pak otevřít nákup
-            if (client.isReady) queryDetails { launchPurchase() } else connect { launchPurchase() }
+    override fun purchase() = purchase(AD_FREE)
+
+    override fun purchaseExport() = purchase(PDF)
+
+    private fun purchase(product: String) {
+        if (details[product] == null) {
+            // první spuštění bez sítě: připojit, načíst produkty a teprve pak otevřít nákup
+            if (client.isReady) queryDetails { launchPurchase(product) } else connect { launchPurchase(product) }
             return
         }
-        launchPurchase()
+        launchPurchase(product)
     }
 
-    private fun launchPurchase() {
-        val d = details
+    private fun finished(product: String?) {
+        if (product == PDF) listener?.onExportPurchaseFinished(false) else listener?.onPurchaseFinished(false)
+    }
+
+    private fun launchPurchase(product: String) {
+        val d = details[product]
         val activity = CurrentActivity.activity
-        if (d == null || activity == null) return listener?.onPurchaseFinished(false) ?: Unit
+        if (d == null || activity == null) return finished(product)
         val params = BillingFlowParams.newBuilder()
             .setProductDetailsParamsList(listOf(BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(d).build()))
             .build()
+        inFlight = product
         val r = client.launchBillingFlow(activity, params)
-        if (r.responseCode != BillingResponseCode.OK && r.responseCode != BillingResponseCode.ITEM_ALREADY_OWNED) listener?.onPurchaseFinished(false)
+        if (r.responseCode == BillingResponseCode.ITEM_ALREADY_OWNED) {
+            // u PDF: předchozí platba ještě není spotřebovaná – najde se a započte
+            queryOwned()
+            if (product == PDF) finished(product)
+        } else if (r.responseCode != BillingResponseCode.OK) finished(product)
+    }
+
+    override fun consumeExport(token: String) {
+        val params = ConsumeParams.newBuilder().setPurchaseToken(token).build()
+        val run = { client.consumeAsync(params) { _, _ -> } }
+        if (client.isReady) run() else connect { run() }
     }
 
     override fun restore() {
@@ -78,19 +103,23 @@ class PlayBillingSdk(context: Context) : BillingSdk {
     // Play neptá na účet – tiché ověření je totéž co obnovení
     override fun refresh() = restore()
 
-    private fun onMain(block: () -> Unit) = android.os.Handler(android.os.Looper.getMainLooper()).post(block)
+    private fun onMain(block: () -> Unit) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post(block)
+    }
 
     private fun queryDetails(then: () -> Unit = {}) {
         val params = QueryProductDetailsParams.newBuilder()
-            .setProductList(listOf(QueryProductDetailsParams.Product.newBuilder().setProductId(PRODUCT).setProductType(ProductType.INAPP).build()))
+            .setProductList(listOf(AD_FREE, PDF).map { QueryProductDetailsParams.Product.newBuilder().setProductId(it).setProductType(ProductType.INAPP).build() })
             .build()
         client.queryProductDetailsAsync(params) { result, res ->
-            if (result.responseCode != BillingResponseCode.OK) return@queryProductDetailsAsync
-            val d = res.productDetailsList.firstOrNull { it.productId == PRODUCT }
-            details = d
+            if (result.responseCode != BillingResponseCode.OK) return@queryProductDetailsAsync onMain(then)
+            val found = res.productDetailsList.associateBy { it.productId }
+            details = found
             onMain {
-                listener?.onPrice(d?.oneTimePurchaseOfferDetails?.formattedPrice)
-                if (d != null) then()
+                listener?.onPrice(found[AD_FREE]?.oneTimePurchaseOfferDetails?.formattedPrice)
+                listener?.onExportPrice(found[PDF]?.oneTimePurchaseOfferDetails?.formattedPrice)
+                // nákup: produkt chybí → launchPurchase ho ukončí jako neúspěšný
+                then()
             }
         }
     }
@@ -99,28 +128,40 @@ class PlayBillingSdk(context: Context) : BillingSdk {
         val params = QueryPurchasesParams.newBuilder().setProductType(ProductType.INAPP).build()
         client.queryPurchasesAsync(params) { result, purchases ->
             if (result.responseCode != BillingResponseCode.OK) return@queryPurchasesAsync
-            val owned = purchases.filter { PRODUCT in it.products && it.purchaseState == Purchase.PurchaseState.PURCHASED }
+            val paid = purchases.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
+            val owned = paid.filter { AD_FREE in it.products }
             // nepotvrzený nákup = právě dokončený (např. čekající platba zaplacená, když aplikace neběžela)
             val fresh = owned.any { !it.isAcknowledged }
             owned.forEach(::acknowledge)
-            onMain { listener?.onAdFree(owned.isNotEmpty(), purchased = fresh) }
+            val exports = paid.filter { PDF in it.products }
+            onMain {
+                listener?.onAdFree(owned.isNotEmpty(), purchased = fresh)
+                exports.forEach { listener?.onExportPaid(it.purchaseToken) }
+            }
         }
     }
 
     private fun onPurchasesUpdated(result: BillingResult, purchases: List<Purchase>?) {
+        val product = inFlight
+        inFlight = null
         when (result.responseCode) {
             BillingResponseCode.OK -> {
-                val mine = purchases.orEmpty().filter { PRODUCT in it.products }
-                val bought = mine.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
-                bought.forEach(::acknowledge)
+                val bought = purchases.orEmpty().filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
+                val adFree = bought.filter { AD_FREE in it.products }
+                val exports = bought.filter { PDF in it.products }
+                adFree.forEach(::acknowledge)
                 onMain {
-                    if (bought.isNotEmpty()) listener?.onAdFree(true, purchased = true)
+                    if (adFree.isNotEmpty()) listener?.onAdFree(true, purchased = true)
+                    exports.forEach { listener?.onExportPaid(it.purchaseToken) }
                     // čekající platba: dokončí se později (refresh při návratu ji najde)
-                    else listener?.onPurchaseFinished(false)
+                    if (adFree.isEmpty() && exports.isEmpty()) finished(product)
                 }
             }
-            BillingResponseCode.ITEM_ALREADY_OWNED -> queryOwned()
-            else -> onMain { listener?.onPurchaseFinished(false) } // zrušeno nebo chyba
+            BillingResponseCode.ITEM_ALREADY_OWNED -> {
+                queryOwned()
+                if (product == PDF) onMain { finished(product) }
+            }
+            else -> onMain { finished(product) } // zrušeno nebo chyba
         }
     }
 
@@ -131,7 +172,10 @@ class PlayBillingSdk(context: Context) : BillingSdk {
 
     private companion object {
         /** jednorázový produkt v Play Console */
-        const val PRODUCT = Products.REMOVE_ADS_PLAY
+        const val AD_FREE = Products.REMOVE_ADS_PLAY
+
+        /** spotřební produkt v Play Console – jedno stažení PDF s řešením */
+        const val PDF = Products.PDF_SOLUTION_PLAY
     }
 }
 

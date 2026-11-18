@@ -123,30 +123,7 @@ class SolveStep(private val p: Problem, val eqs: List<UserEq>, private val sessi
     }
 
     /** Výraz pro neznámou z rovnice i, např. „(8,66·2 + 6·4,5) / 6“; null když obsahuje nespočítané neznámé. */
-    fun expression(uid: String, i: Int): String? {
-        val terms = eqTerms[i]
-        val self = terms.first { it.it.unknownId == uid }
-        val f = if (self.c > 0) -1 else 1
-        val solved = solvedSet
-        val parts = mutableListOf<String>()
-        for (x in terms) {
-            if (x === self) continue
-            val c = x.c * f
-            val text = if (x.it.unknownId != null) {
-                if (x.it.unknownId !in solved) return null
-                val v = answer.getValue(x.it.unknownId)
-                if (x.arm != null) "${fmt(abs(x.c))}·${paren(v)}" else paren(v)
-            } else {
-                val v = x.it.value!!
-                if (x.arm != null) "${fmt(v)}·${fmt(abs(x.c))}" else fmt(v)
-            }
-            parts += (if (c < 0) (if (parts.isNotEmpty()) " − " else "−") else if (parts.isNotEmpty()) " + " else "") + text
-        }
-        val d = abs(self.c)
-        val num = if (parts.isNotEmpty()) parts.joinToString("") else "0"
-        if (abs(d - 1) < 1e-9) return num
-        return (if (parts.size > 1) "($num)" else num) + " / ${fmt(d)}"
-    }
+    fun expression(uid: String, i: Int): String? = expressionFor(eqTerms[i], uid, solvedSet.associateWith { answer.getValue(it) })
 
     fun hint() {
         session.hint()

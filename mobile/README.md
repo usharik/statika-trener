@@ -54,7 +54,7 @@ GOLDEN=1 npx vitest run src/model/golden.test.ts
   ```
   Bez nich release sestavení skončí chybou; zkušební release (CI, emulátor) s testovacími reklamami:
   `./gradlew :app:assembleRelease -Pstatika.allowTestAds=true`.
-- Play Console: jednorázový produkt `remove_ads`; zásady ochrany údajů: `https://usharik.github.io/statika-trener/privacy.html`.
+- Play Console: jednorázový produkt `remove_ads` a spotřební produkt `pdf_solution` (jedno stažení PDF s řešením, 29 Kč); zásady ochrany údajů: `https://usharik.github.io/statika-trener/privacy.html`.
 - Verze: soubor `VERSION` (`MAJOR.MINOR` → versionCode = MAJOR·100 + MINOR).
 
 ## iOS

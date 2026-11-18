@@ -92,6 +92,28 @@ private val CS_APP = mapOf(
     // --- vstup do výkladu a odkaz na trigonometrii (úpravy kurzu trigonometrie) ---
     "learnOpen" to "Výklad a procvičování",
     "trigLink" to "Nejde ti sin a cos? → Základy trigonometrie",
+    // --- export úlohy do PDF ---
+    "pdfExport" to "Uložit jako PDF",
+    "pdfExportTitle" to "Úloha jako PDF",
+    "pdfExportText" to "PDF se otevře v nabídce sdílení – můžeš ho uložit, vytisknout nebo poslat.",
+    "pdfOnlyTask" to "Jen zadání",
+    "pdfWithSolution" to "Zadání s řešením",
+    "pdfFileTask" to "zadani",
+    "pdfFileSolution" to "reseni",
+    "pdfTask" to "Zadání",
+    "pdfAssignment" to "Nosník je uložený a zatížený podle obrázku. Urči reakce ve všech vazbách.",
+    "pdfGiven" to "Dáno",
+    "pdfTryApp" to "Řešení si můžeš krok za krokem ověřit v aplikaci Statika · nosníky – otevři úlohu č. {n}.",
+    "pdfSolution" to "Řešení",
+    "pdfHinge" to "vnitřní kloub, nepřenáší moment",
+    "pdfNoLoads" to "Všechny síly působí kolmo k nosníku a není tu spojité zatížení – zatížení není třeba upravovat.",
+    "pdfUdlPos" to "působí uprostřed zatíženého úseku, {a} m od jeho začátku",
+    "pdfFrom" to "z",
+    "pdfCoupled" to "Zbývající neznámé spočítáme společně ze soustavy rovnic:",
+    "pdfResult" to "Výsledek",
+    "pdfSolutionPaid" to "Zadání je zdarma. Řešení je placené – platí se za každé stažení.",
+    "pdfPaidLeft" to "Zaplacená stažení s řešením: {n}",
+    "pdfNotPaid" to "Platba neproběhla – PDF s řešením se nevytvořilo.",
 )
 
 private val RU_APP = mapOf(
@@ -175,6 +197,28 @@ private val RU_APP = mapOf(
     // --- вход в курсы и ссылка на тригонометрию (правки курса тригонометрии) ---
     "learnOpen" to "Объяснения и задачи",
     "trigLink" to "Не дружишь с sin и cos? → Основы тригонометрии",
+    // --- экспорт задачи в PDF ---
+    "pdfExport" to "Сохранить в PDF",
+    "pdfExportTitle" to "Задача в PDF",
+    "pdfExportText" to "PDF откроется в меню «Поделиться» — его можно сохранить, распечатать или отправить.",
+    "pdfOnlyTask" to "Только условие",
+    "pdfWithSolution" to "Условие с решением",
+    "pdfFileTask" to "uslovie",
+    "pdfFileSolution" to "reshenie",
+    "pdfTask" to "Условие",
+    "pdfAssignment" to "Балка закреплена и нагружена, как показано на рисунке. Определи реакции во всех связях.",
+    "pdfGiven" to "Дано",
+    "pdfTryApp" to "Решение можно проверить шаг за шагом в приложении «Статика · балки» — открой задачу №{n}.",
+    "pdfSolution" to "Решение",
+    "pdfHinge" to "внутренний шарнир, не передаёт момент",
+    "pdfNoLoads" to "Все силы перпендикулярны балке и распределённой нагрузки нет — нагрузки заменять не нужно.",
+    "pdfUdlPos" to "приложена в середине нагруженного участка, {a} м от его начала",
+    "pdfFrom" to "из",
+    "pdfCoupled" to "Оставшиеся неизвестные найдём вместе из системы уравнений:",
+    "pdfResult" to "Результат",
+    "pdfSolutionPaid" to "Условие — бесплатно. Решение платное, оплата за каждое скачивание.",
+    "pdfPaidLeft" to "Оплаченных скачиваний с решением: {n}",
+    "pdfNotPaid" to "Оплата не прошла — PDF с решением не создан.",
 )
 
 private val DICTS: Map<Lang, Map<String, String>> = mapOf(Lang.CS to CS + CS_APP, Lang.RU to RU + RU_APP)

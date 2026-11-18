@@ -10,7 +10,8 @@
 Environment: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH (the .p8 file of an App Store Connect API key with the App Manager
 role). Needs PyJWT with cryptography. Every step is idempotent: what exists is kept or completed, nothing is submitted.
 
-iap.json: {"productId": "...", "name": "...", "price": "3.99", "reviewNote": "...", "screenshot": "path.png",
+iap.json: {"productId": "...", "name": "...", "type": "CONSUMABLE" (default NON_CONSUMABLE), "price": "3.99",
+           "reviewNote": "...", "screenshot": "path.png",
            "localizations": {"en-US": {"name": "...", "description": "..."}, ...}}
 """
 from __future__ import annotations
@@ -196,7 +197,7 @@ def iap(app: str, spec_path: Path):
     else:
         created = call("POST", "/v2/inAppPurchases", {"data": {
             "type": "inAppPurchases",
-            "attributes": {"name": spec["name"], "productId": spec["productId"], "inAppPurchaseType": "NON_CONSUMABLE",
+            "attributes": {"name": spec["name"], "productId": spec["productId"], "inAppPurchaseType": spec.get("type", "NON_CONSUMABLE"),
                            "reviewNote": spec.get("reviewNote", "")},
             "relationships": {"app": {"data": {"type": "apps", "id": app}}}}})
         iap_id = created["data"]["id"]
