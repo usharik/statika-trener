@@ -15,7 +15,7 @@ const p: Problem = {
 const items = allItems(p);
 const defs = symbolsOf(p, items);
 const mA: EqSpec = { kind: 'm', point: 'A', x: 0 };
-const run = (src: string, spec: EqSpec) => analyze(parseEquation(src, defs), spec, items, defs, p);
+const run = (src: string, spec: EqSpec) => analyze(parseEquation(src, defs), spec, items, defs);
 
 describe('zápis rovnic', () => {
   it('přijme různé správné tvary', () => {
@@ -65,10 +65,10 @@ describe('zápis rovnic', () => {
     const its = allItems(g);
     const ds = symbolsOf(g, its);
     const specs: EqSpec[] = (['left', 'right'] as const).map((side) => ({ kind: 'hinge', hingeId: 'h0', point: 'K', x: 3, side }));
-    const r = analyzeBest(parseEquation('RB*2 - F1*1 = 0', ds), specs, its, ds, g);
+    const r = analyzeBest(parseEquation('RB*2 - F1*1 = 0', ds), specs, its, ds);
     expect(r.ok).toBe(true);
     expect(r.spec.kind === 'hinge' && r.spec.side).toBe('right');
-    const l = analyzeBest(parseEquation('MA - RAy*3 = 0', ds), specs, its, ds, g);
+    const l = analyzeBest(parseEquation('MA - RAy*3 = 0', ds), specs, its, ds);
     expect(l.ok).toBe(true);
   });
 });

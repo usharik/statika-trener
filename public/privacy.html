@@ -12,11 +12,11 @@
 </head>
 <body>
 <h1>Statika · nosníky – zásady ochrany osobních údajů</h1>
-<p><em>Platí pro mobilní aplikaci „Statika · nosníky“ pro Android a pro iPhone a iPad (iOS, iPadOS). Webová verze žádné údaje nesbírá.</em></p>
+<p><em>Platí pro mobilní aplikaci „Statika · nosníky“ pro Android a pro iPhone a iPad (iOS, iPadOS). Webová verze žádné údaje nesbírá – viz <a href="#web">Webová verze</a>.</em></p>
 
 <h2>Co aplikace ukládá</h2>
 <p>Nastavení (obtížnost, typy nosníků, jazyk, vzhled), číslo rozpracované úlohy, počet vyřešených úloh, oblíbené úlohy
-a postup ve výkladu „Základy statiky“ se ukládají jen v zařízení (na Androidu v datech aplikace, na iPhonu a iPadu
+a postup ve výkladu (kurzy „Základy statiky“ a „Základy trigonometrie“) i v procvičování se ukládají jen v zařízení (na Androidu v datech aplikace, na iPhonu a iPadu
 v jejím úložišti nastavení). Aplikace nemá uživatelské účty a nic, co do ní napíšeš (rovnice, výsledky), neodesílá.</p>
 
 <h2>Analytika a hlášení chyb</h2>
@@ -37,6 +37,12 @@ Obsah reklam je omezen na kategorii vhodnou pro mladistvé.</p>
 <p>Reklamu lze trvale odstranit jednorázovým nákupem v aplikaci. Platbu zpracovává Google Play, resp. App Store (Apple);
 aplikace se dozví jen to, zda je nákup zaplacený, žádné platební údaje nevidí.</p>
 
+<h2 id="web">Webová verze</h2>
+<p>Webová verze nemá analytiku ani reklamu. Nastavení, oblíbené úlohy a postup ve výkladu a procvičování se ukládají jen
+v prohlížeči (localStorage). Export úlohy do PDF probíhá přímo v prohlížeči, nic se neodesílá.
+Teprve když otevřeš okno „Podpořit autora“, načte se platební widget z usharik.dev; platbu zpracuje Stripe
+(případně PayPal nebo Ko-fi, když zvolíš je). Tyto služby zpracují údaje potřebné k platbě podle svých zásad.</p>
+
 <h2>Smazání údajů</h2>
 <p>Údaje uložené v zařízení smažeš odinstalováním aplikace (na Androidu i vymazáním jejích dat v nastavení systému).</p>
 
@@ -46,8 +52,8 @@ aplikace se dozví jen to, zda je nákup zaplacený, žádné platební údaje n
 <hr />
 <h1 lang="ru">Статика · балки — политика конфиденциальности</h1>
 <div lang="ru">
-<p><em>Действует для мобильного приложения «Статика · балки» для Android, iPhone и iPad. Веб-версия никаких данных не собирает.</em></p>
-<p>Настройки, номер текущей задачи, число решённых задач, избранные задачи и прогресс в курсе «Основы статики» хранятся
+<p><em>Действует для мобильного приложения «Статика · балки» для Android, iPhone и iPad. Веб-версия никаких данных не собирает (см. ниже).</em></p>
+<p>Настройки, номер текущей задачи, число решённых задач, избранные задачи и прогресс в курсах («Основы статики», «Основы тригонометрии») и в практике хранятся
 только на устройстве. Учётных записей нет, введённые уравнения и ответы никуда не отправляются.</p>
 <p>Приложение использует Google Firebase Analytics и Crashlytics (<a href="https://policies.google.com/privacy">политика Google</a>):
 псевдонимные сведения об использовании (идентификатор установки; решена задача, число подсказок, сложность, куплена ли покупка «без рекламы») и технические
@@ -60,6 +66,9 @@ AdMob обрабатывает псевдонимные идентификато
 отслеживания между приложениями. Содержание рекламы ограничено категорией, подходящей для подростков.</p>
 <p>Рекламу можно убрать разовой покупкой. Оплату обрабатывает Google Play или App Store (Apple); приложение узнаёт только,
 оплачена ли покупка, платёжных данных оно не видит.</p>
+<p><strong>Веб-версия</strong> не использует аналитику и рекламу. Настройки, избранное и прогресс хранятся только в браузере
+(localStorage), экспорт в PDF выполняется в браузере. Только при открытии окна «Поддержать автора» загружается платёжный
+виджет с usharik.dev; платёж обрабатывает Stripe (или PayPal / Ko-fi, если выбрать их).</p>
 <p>Данные на устройстве удаляются при удалении приложения или очистке его данных.</p>
 <p>Вопросы: <a href="https://github.com/usharik/statika-trener/issues">github.com/usharik/statika-trener/issues</a>.</p>
 </div>

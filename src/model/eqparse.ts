@@ -5,7 +5,8 @@
  * i známá zatížení (F_1, Q, q, M …) – díky tomu lze každý člen přiřadit konkrétní síle.
  * Správnost se posuzuje až na nenulový násobek (znaménková konvence, vynásobení rovnice).
  */
-import { EPS, expected, type EqSpec, type Item } from './mechanics';
+import { EPS, coef, expected, type EqSpec, type Item } from './mechanics';
+import { plain } from '../format';
 import type { Problem } from './types';
 
 // ---------------------------------------------------------------- značky
@@ -41,7 +42,8 @@ export function symbolsOf(p: Problem, items: Item[]): SymDef[] {
   return out;
 }
 
-function lookup(defs: SymDef[], raw: string): SymDef | undefined {
+/** Značka podle zápisu: přesně, jinak bez ohledu na velikost písmen (je-li jednoznačná). */
+export function lookupSym(defs: SymDef[], raw: string): SymDef | undefined {
   const n = norm(raw);
   const exact = defs.find((d) => norm(d.name) === n);
   if (exact) return exact;
@@ -111,7 +113,9 @@ export type ParseError =
   | { kind: 'unknownSym'; name: string; at: number }
   | { kind: 'nonlinear'; at: number }
   | { kind: 'div0'; at: number }
-  | { kind: 'twoEq'; at: number };
+  | { kind: 'twoEq'; at: number }
+  /** výsledek není číslo (odmocnina ze záporného čísla, tan 90° …) */
+  | { kind: 'badValue'; at: number };
 
 export interface Parsed {
   terms: TopTerm[];
@@ -143,6 +147,10 @@ const FUNCS: Record<string, (x: number) => number> = {
   sqrt: Math.sqrt,
 };
 
+export function isFunctionName(s: string): boolean {
+  return s.toLowerCase() in FUNCS;
+}
+
 export function parseEquation(src: string, defs: SymDef[]): Parsed {
   const { toks, bad } = tokenize(src);
   if (bad !== undefined) return { terms: [], hasEq: false, error: { kind: 'syntax', at: bad } };
@@ -172,9 +180,11 @@ export function parseEquation(src: string, defs: SymDef[]): Parsed {
         if (!isOp(')')) throw new Fail({ kind: 'syntax', at: end() });
         i++;
         if (!isConst(inner)) throw new Fail({ kind: 'nonlinear', at: tk.s });
-        return { lin: { a: {}, c: fn(inner.c) } };
+        const v = fn(inner.c);
+        if (!Number.isFinite(v) || Math.abs(v) > 1e12) throw new Fail({ kind: 'badValue', at: tk.s });
+        return { lin: { a: {}, c: v } };
       }
-      const d = lookup(defs, tk.v);
+      const d = lookupSym(defs, tk.v);
       if (!d) throw new Fail({ kind: 'unknownSym', name: tk.v, at: tk.s });
       const key = d.kind === 'unknown' ? 'u:' + d.unknownId : 'k:' + d.name;
       return { lin: { a: { [key]: 1 }, c: 0 } };
@@ -273,6 +283,8 @@ export interface Analysis {
   issues: Issue[];
   /** čísla, která nejde přiřadit žádné síle */
   stray: number[];
+  /** rozsahy těchto čísel v textu */
+  straySpans: { s: number; e: number }[];
   /** položka → rozsahy členů v textu (pro nápovědu, která člen nahradí) */
   spans: Record<string, { s: number; e: number }[]>;
   spec: EqSpec;
@@ -287,13 +299,16 @@ function pickItem(d: SymDef, eq: EqSpec, items: Item[]): Item | undefined {
   return cands.find((c) => c.kind === (eq.kind === 'fx' ? 'fx' : 'fy')) ?? cands[0];
 }
 
-export function analyze(parsed: Parsed, spec: EqSpec, items: Item[], defs: SymDef[], p: Problem): Analysis {
-  const coef: Record<string, number> = {};
+export function analyze(parsed: Parsed, spec: EqSpec, items: Item[], defs: SymDef[]): Analysis {
+  const coef_: Record<string, number> = {};
   const spans: Record<string, { s: number; e: number }[]> = {};
   const stray: number[] = [];
+  const straySpans: { s: number; e: number }[] = [];
   const addTo = (id: string, v: number, sp: { s: number; e: number }) => {
-    coef[id] = (coef[id] ?? 0) + v;
-    (spans[id] ??= []).push(sp);
+    coef_[id] = (coef_[id] ?? 0) + v;
+    const list = (spans[id] ??= []);
+    // člen „(F_1 + 1)·7“ přispívá k téže síle dvakrát – rozsah stačí jednou
+    if (!list.some((x) => x.s === sp.s && x.e === sp.e)) list.push(sp);
   };
 
   for (const tm of parsed.terms) {
@@ -318,20 +333,31 @@ export function analyze(parsed: Parsed, spec: EqSpec, items: Item[], defs: SymDe
             const it = pickItem(d, spec, items);
             if (it) cands.push({ it, base: it.value! });
           }
-      // přednost má síla, která do rovnice patří a ještě nemá člen
-      const score = (c: { it: Item }) => (coef[c.it.id] ? 0 : 2) + (expected(c.it, spec).sign !== 0 ? 1 : 0);
-      cands.sort((a, b) => score(b) - score(a));
-      if (cands.length) addTo(cands[0].it.id, tm.lin.c / cands[0].base, sp);
-      else stray.push(tm.lin.c);
+      // přednost má síla, u které by člen dal přesně očekávaný koeficient (tj. ostatní činitele jsou
+      // její rameno – „1·12“, kde 1 je rameno a 12 síla, nesmí připadnout zatížení q = 1),
+      // pak síla, která do rovnice patří a ještě nemá člen
+      const c0 = tm.lin.c;
+      const score = (c: { it: Item; base: number }) => {
+        const want = Math.abs(coef(expected(c.it, spec)));
+        const fits = want > 0 && near(Math.abs(c0 / c.base), want);
+        return (fits ? 4 : 0) + (coef_[c.it.id] ? 0 : 2) + (expected(c.it, spec).sign !== 0 ? 1 : 0);
+      };
+      // stabilní řazení (jako sortedByDescending v Kotlinu)
+      const sorted = cands.map((c, i) => ({ c, i, sc: score(c) })).sort((a, b) => b.sc - a.sc || a.i - b.i);
+      if (sorted.length) addTo(sorted[0].c.it.id, tm.lin.c / sorted[0].c.base, sp);
+      else {
+        stray.push(tm.lin.c);
+        straySpans.push(sp);
+      }
     }
   }
 
   const exp: Record<string, number> = {};
   for (const it of items) {
     const e = expected(it, spec);
-    exp[it.id] = e.sign * (e.arm ?? 1);
+    exp[it.id] = coef(e);
   }
-  const user = (id: string) => (Math.abs(coef[id] ?? 0) < 1e-9 ? 0 : coef[id]);
+  const user = (id: string) => (Math.abs(coef_[id] ?? 0) < 1e-9 ? 0 : coef_[id]);
   const empty = items.every((it) => user(it.id) === 0) && !stray.length;
 
   // λ: poměr, se kterým souhlasí nejvíc členů. Běžně žák píše rovnici bez násobení (λ = ±1),
@@ -373,23 +399,24 @@ export function analyze(parsed: Parsed, spec: EqSpec, items: Item[], defs: SymDe
   }
   // chybějící členy až na konec – nejdřív to, co je napsané
   issues.sort((a, b) => Number(a.kind === 'missing') - Number(b.kind === 'missing'));
-  void p;
-  return { ok: !empty && !issues.length && !stray.length && lambda !== null, empty, lambda, issues, stray, spans, spec };
+  return { ok: !empty && !issues.length && !stray.length && lambda !== null, empty, lambda, issues, stray, straySpans, spans, spec };
 }
 
 /** Pro kloub zkusí obě části nosníku a vezme tu, která k zápisu sedí lépe. */
-export function analyzeBest(parsed: Parsed, specs: EqSpec[], items: Item[], defs: SymDef[], p: Problem): Analysis {
-  const res = specs.map((s) => analyze(parsed, s, items, defs, p));
+export function analyzeBest(parsed: Parsed, specs: EqSpec[], items: Item[], defs: SymDef[]): Analysis {
+  const res = specs.map((s) => analyze(parsed, s, items, defs));
   const cost = (a: Analysis) => (a.ok ? -1 : a.issues.length + a.stray.length);
   return res.reduce((b, a) => (cost(a) < cost(b) ? a : b));
 }
 
 /** Text správného členu pro nápovědu, např. „- F_1y*2“. */
-export function termText(it: Item, spec: EqSpec, lambdaSign: number, first: boolean): string {
+export function termText(it: Item, spec: EqSpec, lambdaSign: number, first: boolean, scale = 1): string {
   const e = expected(it, spec);
   const sgn = e.sign * lambdaSign;
-  const arm = e.arm !== null && e.arm > EPS && it.kind === 'fy' ? '*' + String(+e.arm.toFixed(3)).replace('.', ',') : '';
-  const body = it.sym + arm;
+  const arm = e.arm !== null && e.arm > EPS && it.kind === 'fy' ? '*' + plain(e.arm, 3).replace('.', ',') : '';
+  // rovnice vynásobená číslem (2·R_A + 2·R_B …) – vložený člen musí mít stejný násobek
+  const k = Math.abs(scale - 1) > 1e-9 ? plain(scale, 3).replace('.', ',') + '*' : '';
+  const body = k + it.sym + arm;
   if (first) return (sgn < 0 ? '-' : '') + body;
   return (sgn < 0 ? ' - ' : ' + ') + body;
 }
