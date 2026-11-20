@@ -28,6 +28,18 @@ npm run build      # statická verze do dist/
 Nápovědy nikdy neříkají „špatně“: nejdřív připomenou princip, pak ukážou na konkrétní sílu
 (případně zakreslí rameno), teprve nakonec doplní odpověď.
 
+## Další funkce (shodně s mobilní aplikací)
+
+- **Výklad** – dva kurzy: „Základy statiky“ (9 lekcí) a „Základy trigonometrie“ (8 lekcí) s interaktivními kartami
+  (ukázka → tip → ověření), slovníček a odkazy z nápověd trenažéru přímo na vysvětlující kartu.
+- **Procvičování** (kurz trigonometrie) – 7 sérií, 24 typů úloh na 3 úrovních, typické chyby se poznají a vysvětlí.
+  Číslo série je shodné s aplikací (učitel zadá „série 4127“ a všichni dostanou stejné úlohy).
+- **Export do PDF** – zadání úlohy, nebo zadání s celým řešením (uvolnění, rovnice, výsledky), včetně výkresu.
+  Na webu zdarma; v mobilní aplikaci je PDF s řešením placené.
+- **Oblíbené úlohy**, sdílení odkazu, otevření úlohy podle čísla, prohlídka ovládání, světlé a tmavé téma.
+- **Podpora autora** – widget usharik.dev (karta, Apple/Google Pay přes Stripe, PayPal, Ko-fi); nabídka se ukáže
+  nenásilně po vyřešených úlohách, na konci kurzu, po hvězdě v procvičování, v nastavení a pod ikonou ♥.
+
 ## Úlohy
 
 - typy: prostý nosník, nosník s převislým koncem/konci, vetknutý nosník, Gerberův nosník s kloubem
@@ -41,6 +53,10 @@ Nápovědy nikdy neříkají „špatně“: nejdřív připomenou princip, pak 
 - `src/model/` – typy, generátor, mechanika (reakce, rovnice, Gaussova eliminace), rozbor zapsaných rovnic (`eqparse.ts`), testy
 - `src/components/BeamDrawing.tsx` – technický výkres v SVG (podpory, kóty, síly, reakce, rozmístění popisků)
 - `src/steps/` – jednotlivé kroky hry
+- `src/trainer/` – logika kroků trenažéru (přepis ze sdíleného kódu aplikace), nastavení, oblíbené
+- `src/learn/` – výklad: kostra karet (`kit/`), lekce `lessons/Lesson1–9`, `lessons/trig/TrigLesson1–8`
+- `src/practice/` – procvičování: typy úloh (`types/`), kontrola odpovědí, série, obrázky
+- `src/pdf/` – export úlohy do PDF (vlastní zápis PDF, stránky kreslené na canvas)
 - `src/i18n.ts` – texty a nápovědy (cs, ru)
 
 ## Mobilní aplikace
