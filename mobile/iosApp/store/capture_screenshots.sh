@@ -80,6 +80,10 @@ for item in walk(json.load(open(os.path.join(src, "manifest.json")))):
     if name.startswith("iap-settings") and kind == "iphone" and dst.endswith("/cs"):
         os.makedirs(iap, exist_ok=True)
         shutil.copy(os.path.join(src, item["exportedFileName"]), os.path.join(iap, "settings-remove-ads.png"))
+    # okno PDF s placeným „Zadání s řešením“ pro kontrolu nákupu pdf_solution_statika
+    if name.startswith("iap-pdf") and kind == "iphone" and dst.endswith("/cs"):
+        os.makedirs(iap, exist_ok=True)
+        shutil.copy(os.path.join(src, item["exportedFileName"]), os.path.join(iap, "pdf-solution.png"))
 print(dst, sorted(f for f in os.listdir(dst) if f.startswith(kind)))
 PY
         rm -rf "$OUT/raw-$KIND-$LOCALE"

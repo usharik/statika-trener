@@ -8,7 +8,7 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "1.10"
+    MARKETING_VERSION: "1.13"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     # Krok Gradle zapisuje mimo sandbox, který Xcode skriptům dává.
@@ -178,11 +178,10 @@ targets:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: Apple Distribution
           PROVISIONING_PROFILE_SPECIFIER: Statika App Store
-          # Doplnit iOS aplikaci v AdMob (Apps → Add app → iOS) a její dvě jednotky. Dokud je tu REPLACE,
-          # AdMobBridge.ifAvailable() vrátí nil a aplikace běží bez reklamy (nespadne).
-          ADMOB_APP_ID: REPLACE
-          ADMOB_BANNER_ID: REPLACE
-          ADMOB_INTERSTITIAL_ID: REPLACE
+          # AdMob → aplikace „Statika: reakce nosníků“ (iOS), jednotky „banner“ (výsledek) a „interpage“ (mezistránková).
+          ADMOB_APP_ID: ca-app-pub-6420074467468909~2665521232
+          ADMOB_BANNER_ID: ca-app-pub-6420074467468909/3327866218
+          ADMOB_INTERSTITIAL_ID: ca-app-pub-6420074467468909/8627248172
   StatikaUITests:
     type: bundle.ui-testing
     platform: iOS

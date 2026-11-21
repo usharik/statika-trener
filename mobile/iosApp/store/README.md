@@ -5,31 +5,38 @@ jazyky stránky cs a ru (jazyky rozhraní). iPhone i iPad. Celá infrastruktura 
 (`~/dev/Ear4Music2/iosApp/store`, `.github/workflows/{testflight,asc-setup,ios-screenshots}.yml`, `fastlane/`)
 a upravená na tuto aplikaci; při změně tam stojí za to porovnat obě.
 
-## Postup prvního vydání (vlastník účtu)
+## Klíče a podpis (Infisical, jako CzechQuiz, MySongbook a PhaserPrint)
 
-1. **App Store Connect → Aplikace → +**: nová aplikace iOS, název „Statika: reakce nosníků“, primární jazyk čeština,
-   bundle id `cz.usharik.statika` (nejdřív ho zaregistrovat v Certificates, Identifiers & Profiles → Identifiers),
-   SKU např. `statika`. Aplikace se přes API vytvořit nedá.
-2. **Profil** „Statika App Store“ (Profiles → + → App Store Connect, bundle id `cz.usharik.statika`, certifikát
-   Apple Distribution týmu – stejný jako u Ear4Music / CzechDeclensionQuiz). Uložit do `iosApp/signing/`
-   jako `Statika_App_Store.mobileprovision`, vedle `dist.p12` a `AuthKey_<KEYID>.p8` (adresář je v .gitignore).
-3. **Firebase**: v projektu Statika (stejném jako Android) přidat iOS aplikaci `cz.usharik.statika`, stáhnout
-   `GoogleService-Info.plist` do `iosApp/Statika/` (v .gitignore).
-4. **AdMob**: Apps → Add app → iOS (bez odkazu na obchod), dvě jednotky: banner („výsledek“) a interstitial.
-   ID vepsat do `iosApp/project.yml` (konfigurace Release: `ADMOB_APP_ID`, `ADMOB_BANNER_ID`, `ADMOB_INTERSTITIAL_ID`).
-   Dokud je tam `REPLACE`, testflight.yml build odmítne. Po vydání: AdMob → aplikace → „Add app store listing“.
-5. **Tajemství GitHubu**: `./setup-github-secrets.sh` (z `mobile/`, nejdřív bez parametrů – vypíše, co chybí),
-   pak `./setup-github-secrets.sh --apply ios`.
-6. **App Store Connect setup** (Actions → *App Store Connect setup*), postupně příkazy:
-   `status` → `price-free` → `age-rating` → `iap` (nákup `remove_ads_statika` z `iap/remove_ads_statika.json`, spotřební `pdf_solution_statika` z `iap/pdf_solution_statika.json`
-   s lokalizacemi, cenou, dostupností a snímkem `iap/settings-remove-ads.png`) → `review-notes`.
-7. **TestFlight** (Actions → *TestFlight*, nebo tag `ios-v<cokoli>`): build číslo = číslo běhu, verze = `mobile/VERSION`.
-8. **Snímky** (Actions → *iOS store screenshots*, nebo tag `ios-screenshots<cokoli>`): artefakt rozbalit do
-   `screenshots/<locale>/` (`iphone-*.png` 1320×2868, `ipad-*.png` 2064×2752) a `iap/settings-remove-ads.png`.
-9. **Stránka**: `fastlane ios listing` (texty + snímky), štítek **App Privacy**: `fastlane ios privacy`
-   (Apple ID správce, 2FA) nebo ručně podle `fastlane/app_privacy_details.json`.
-10. **Odeslat ke kontrole**: `attach-build` (číslo buildu) → `submit` s products `remove_ads_statika`
-    (první nákup v aplikaci musí jít ke kontrole spolu s verzí).
+Certifikát Apple Distribution týmu a klíč App Store Connect API jsou v Infisicalu (projekt `2e201525-…` CzechQuizu,
+env `prod`): `/ios-signing` (`DIST_CERT_ID`, `DIST_P12_BASE64`, `DIST_P12_PASSWORD`) a `/app-store` (`ASC_KEY_ID`,
+`ASC_ISSUER_ID`, `ASC_KEY_P8`). Nic z toho není v repozitáři ani na disku; skripty je berou přes `infisical run`.
+
+- `iosApp/upload-testflight.sh <build> [archive|upload|all]` – podepsaný archiv (dočasná klíčenka) a nahrání do
+  App Store Connect. Profil „Statika App Store“ stáhne přes API (při prvním běhu ho vytvořil). Verze = `mobile/VERSION`,
+  build musí s každým nahráním růst. Hlídá Firebase plist, id AdMob a privacy manifesty jako `testflight.yml`.
+- `iosApp/store/asc.sh <příkaz>` – spustí příkaz s klíčem ASC (`ASC_KEY_PATH` = dočasný .p8), např.
+  `iosApp/store/asc.sh python3 iosApp/store/tools/asc_setup.py --bundle-id cz.usharik.statika status`
+  (Python potřebuje `pyjwt cryptography`) nebo `iosApp/store/asc.sh bundle exec fastlane ios listing`.
+- `GoogleService-Info.plist` (Firebase projekt `statika-learn`) je jen lokálně v `iosApp/Statika/` (v .gitignore).
+
+GitHub workflow `testflight.yml`, `asc-setup.yml` a `ios-screenshots.yml` dělají totéž na GitHubu, pokud jsou
+v repozitáři tajemství (`./setup-github-secrets.sh`); hlavní cesta je lokální.
+
+## Postup vydání
+
+1. Hotovo: aplikace v App Store Connect (id 6837713584), bundle id `cz.usharik.statika`, profil „Statika App Store“,
+   iOS aplikace ve Firebase (`statika-learn`), AdMob aplikace `ca-app-pub-6420074467468909~2665521232` s jednotkami
+   banner a interpage (`project.yml`, konfigurace Release).
+2. `asc_setup.py` (přes `asc.sh`): `status` → `price-free` → `age-rating` (celý dotazník 2025: reklama ano, jinak nic)
+   → `iap --spec iosApp/store/iap/remove_ads_statika.json` a `iap --spec iosApp/store/iap/pdf_solution_statika.json`
+   → `review-notes --notes iosApp/store/review_notes.txt`.
+3. `iosApp/upload-testflight.sh <build>` → TestFlight; vyzkoušet reklamu, nákupy v sandboxu, obnovení, PDF, souhlas UMP.
+4. Snímky: `iosApp/store/capture_screenshots.sh` (simulátory iPhone Pro Max a iPad Pro 13", cs + ru) →
+   `screenshots/<locale>/`, `iap/settings-remove-ads.png` a `iap/pdf-solution.png`; znovu `iap` (nahraje snímky ke kontrole).
+5. Stránka: `asc.sh bundle exec fastlane ios listing`; štítek App Privacy: `fastlane ios privacy` (Apple ID, 2FA)
+   nebo ručně podle `fastlane/app_privacy_details.json`.
+6. `attach-build --build <číslo>` → `submit --products remove_ads_statika,pdf_solution_statika`
+   (první nákupy v aplikaci jdou ke kontrole spolu s verzí). Vydání ručně; po vydání AdMob → „Add app store listing“.
 
 ## Stránka
 
@@ -48,7 +55,7 @@ Limity, URL, nákup a soulad štítku App Privacy s `PrivacyInfo.xcprivacy` hlí
 
 Snímky jsou skutečné snímky ze simulátoru: `capture_screenshots.sh` spustí `StatikaUITests/StoreScreenshotTests` na
 nejnovějším iPhonu Pro Max a iPadu Pro 13" v obou jazycích (argument `-statika.lang`, stavový řádek 9:41):
-úloha (Gerberův nosník), rovnice z palety, výsledek, výklad a lekce o momentu.
+úloha (Gerberův nosník), rovnice z palety, výsledek, výklad, lekce o momentu, kurz trigonometrie a série procvičování; navíc okno PDF a nastavení s nákupem pro kontrolu nákupů.
 
 ## Reklama, nákup a soukromí
 

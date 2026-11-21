@@ -2,7 +2,7 @@
 """App Store Connect setup of a release through the API: the things App Store Connect otherwise wants done by hand.
 
     python3 asc_setup.py --bundle-id <id> status
-    python3 asc_setup.py --bundle-id <id> price-free                 # the app's price schedule: free everywhere
+    python3 asc_setup.py --bundle-id <id> price-free                 # free everywhere + content rights declaration
     python3 asc_setup.py --bundle-id <id> age-rating                 # the version's age rating: the app shows ads
     python3 asc_setup.py --bundle-id <id> iap --spec iap.json        # a non-consumable with localizations, price,
                                                                      # availability, review note and screenshot
@@ -49,7 +49,16 @@ def call(method: str, path: str, body=None, ok_errors=()):
             text = r.read().decode()
             return json.loads(text) if text else None
     except urllib.error.HTTPError as e:
-        detail = e.read().decode()[:1500]
+        raw = e.read().decode()
+        detail = raw[:1500]
+        try:  # "not in valid state" hides the real reasons in meta.associatedErrors
+            reasons = [f"{where}: {x.get('code')} {x.get('detail', '')}"
+                       for err in json.loads(raw).get("errors", [])
+                       for where, xs in (err.get("meta") or {}).get("associatedErrors", {}).items() for x in xs]
+        except ValueError:
+            reasons = []
+        if reasons:
+            detail = detail[:300] + "\n  " + "\n  ".join(reasons)
         if e.code in ok_errors:
             print(f"  ({method} {path}: {e.code} {detail[:200]})")
             return None
@@ -73,6 +82,21 @@ def app_id(bundle_id: str) -> str:
 def latest_version(app: str) -> dict | None:
     versions = call("GET", f"/v1/apps/{app}/appStoreVersions?filter[platform]=IOS&limit=5")["data"]
     return versions[0] if versions else None
+
+
+def set_version(app: str, version: str):
+    """The editable App Store version gets the version string of the build (mobile/VERSION); the first one is 1.0."""
+    v = latest_version(app)
+    if not v:
+        raise SystemExit("no App Store version")
+    a = v["attributes"]
+    if a["versionString"] == version:
+        print(f"version {version} already ({a['appStoreState']})")
+        return
+    if a["appStoreState"] not in ("PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED"):
+        raise SystemExit(f"version {a['versionString']} is {a['appStoreState']}; create a new version in App Store Connect")
+    call("PATCH", f"/v1/appStoreVersions/{v['id']}", {"data": {"type": "appStoreVersions", "id": v["id"], "attributes": {"versionString": version}}})
+    print(f"version {a['versionString']} -> {version}")
 
 
 # --- status ------------------------------------------------------------------------------------------------
@@ -145,6 +169,10 @@ def price_free(app: str):
                           "relationships": {"appPricePoint": {"data": {"type": "appPricePoints", "id": point}}}}]}
     call("POST", "/v1/appPriceSchedules", body)
     print("price schedule: free in the base territory USA, the other territories follow automatically")
+    # Required for the first submission: problems, lessons and drawings are all made by the app itself.
+    call("PATCH", f"/v1/apps/{app}", {"data": {"type": "apps", "id": app,
+                                               "attributes": {"contentRightsDeclaration": "DOES_NOT_USE_THIRD_PARTY_CONTENT"}}})
+    print("content rights: does not use third-party content")
 
 
 # --- age rating ------------------------------------------------------------------------------------------
@@ -163,22 +191,44 @@ def age_rating_declaration(app: str) -> dict | None:
     return None
 
 
+# Honest answers for a beam-statics trainer: generated problems, no user content, no chat or web browsing,
+# banner and interstitial ads (as MySongbook's asc_listing.py). Keys of newer API versions not listed here are
+# answered "no" (false, or NONE where the API wants a frequency) and reported.
+AGE_RATING = {
+    "advertising": True, "ageAssurance": False, "alcoholTobaccoOrDrugUseOrReferences": "NONE", "contests": "NONE",
+    "gamblingSimulated": "NONE", "gambling": False, "gunsOrOtherWeapons": "NONE", "healthOrWellnessTopics": False,
+    "horrorOrFearThemes": "NONE", "lootBox": False, "matureOrSuggestiveThemes": "NONE", "medicalOrTreatmentInformation": "NONE",
+    "messagingAndChat": False, "parentalControls": False, "profanityOrCrudeHumor": "NONE", "sexualContentGraphicAndNudity": "NONE",
+    "sexualContentOrNudity": "NONE", "unrestrictedWebAccess": False, "userGeneratedContent": False,
+    "violenceCartoonOrFantasy": "NONE", "violenceRealistic": "NONE", "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+    "socialMedia": False,
+}
+# Left as they are: overrides stay NONE, no kids band, no Korean rating number or age-rating info page.
+IGNORED = {"kidsAgeBand", "ageRatingOverride", "ageRatingOverrideV2", "koreaAgeRatingOverride",
+           "gracRatingClassificationNumber", "developerAgeRatingInfoUrl", "socialMediaAgeRestricted"}
+
+
 def age_rating(app: str):
     decl = age_rating_declaration(app)
     if not decl:
         raise SystemExit("no age rating declaration reachable through the API")
     attrs = decl["attributes"]
-    print("age rating before:", json.dumps(attrs, ensure_ascii=False))
-    wanted = {}
-    if "advertising" in attrs:
-        wanted["advertising"] = True
-    if not wanted:
-        print("this API version has no 'advertising' attribute in the declaration; set it in App Store Connect")
-        return
-    call("PATCH", f"/v1/ageRatingDeclarations/{decl['id']}",
-         {"data": {"type": "ageRatingDeclarations", "id": decl["id"], "attributes": wanted}})
+    path = f"/v1/ageRatingDeclarations/{decl['id']}"
+    patch = lambda wanted: call("PATCH", path, {"data": {"type": "ageRatingDeclarations", "id": decl["id"], "attributes": wanted}})
+    patch({k: v for k, v in AGE_RATING.items() if k in attrs})
+    for key in [k for k in attrs if k not in AGE_RATING and k not in IGNORED]:
+        for answer in (False, "NONE"):
+            if call("PATCH", path, {"data": {"type": "ageRatingDeclarations", "id": decl["id"], "attributes": {key: answer}}},
+                    ok_errors=(409, 422)) is not None:
+                print(f"answered {key} = {answer!r} (not in AGE_RATING)")
+                break
+        else:
+            print(f"could not answer {key}; set it in App Store Connect")
     after = age_rating_declaration(app)["attributes"]
     print("age rating after:", json.dumps(after, ensure_ascii=False))
+    missing = [k for k, v in after.items() if v is None and k not in IGNORED]
+    if missing:
+        print("still unanswered:", missing)
 
 
 # --- in-app purchase ---------------------------------------------------------------------------------------
@@ -253,6 +303,8 @@ def iap(app: str, spec_path: Path):
     shot = call("GET", f"/v2/inAppPurchases/{iap_id}/appStoreReviewScreenshot", ok_errors=(404,))
     if shot and shot.get("data"):
         print("  review screenshot kept:", shot["data"]["attributes"].get("assetDeliveryState", {}).get("state"))
+    elif spec.get("screenshot") and not (spec_path.parent / spec["screenshot"]).exists():
+        print(f"  review screenshot {spec['screenshot']} not there yet (capture_screenshots.sh); run iap again later")
     elif spec.get("screenshot"):
         path = spec_path.parent / spec["screenshot"]
         data = path.read_bytes()
@@ -315,11 +367,15 @@ def submit(app: str, product_ids: list[str]):
         sub = call("POST", "/v1/reviewSubmissions", {"data": {"type": "reviewSubmissions", "attributes": {"platform": "IOS"},
                                                                "relationships": {"app": {"data": {"type": "apps", "id": app}}}}})["data"]
         print(f"submission {sub['id']}: created")
-    # The items list does not say which version an item holds: a 409 "already added" is the same as success.
-    added = call("POST", "/v1/reviewSubmissionItems", {"data": {"type": "reviewSubmissionItems", "relationships": {
-        "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": sub["id"]}},
-        "appStoreVersion": {"data": {"type": "appStoreVersions", "id": version["id"]}}}}}, ok_errors=(409,))
-    print(f"  version {version['attributes'].get('versionString')} " + ("added" if added else "already in it"))
+    # A version that cannot be reviewed is a 409 too: it must stop here with the reasons, not count as "already added".
+    items = call("GET", f"/v1/reviewSubmissions/{sub['id']}/items?include=appStoreVersion&limit=50")["data"]
+    if any((i["relationships"].get("appStoreVersion", {}).get("data") or {}).get("id") == version["id"] for i in items):
+        print(f"  version {version['attributes'].get('versionString')} already in it")
+    else:
+        call("POST", "/v1/reviewSubmissionItems", {"data": {"type": "reviewSubmissionItems", "relationships": {
+            "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": sub["id"]}},
+            "appStoreVersion": {"data": {"type": "appStoreVersions", "id": version["id"]}}}}})
+        print(f"  version {version['attributes'].get('versionString')} added")
     for product in product_ids:
         iaps = [i for i in pages(f"/v1/apps/{app}/inAppPurchasesV2?filter[productId]={product}&limit=50") if i["attributes"]["productId"] == product]
         if not iaps:
@@ -364,10 +420,11 @@ def review_notes(app: str, notes_path: Path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--bundle-id", required=True)
-    parser.add_argument("command", choices=["status", "price-free", "age-rating", "iap", "cancel-review", "attach-build", "submit", "review-notes"])
+    parser.add_argument("command", choices=["status", "price-free", "age-rating", "iap", "cancel-review", "attach-build", "submit", "review-notes", "set-version"])
     parser.add_argument("--notes", type=Path, help="review-notes: the text file with the notes for App Review")
     parser.add_argument("--spec", type=Path, help="iap: the JSON file describing the product")
     parser.add_argument("--build", help="attach-build: the build number")
+    parser.add_argument("--version", help="set-version: the version string (default: mobile/VERSION)")
     parser.add_argument("--products", default="", help="submit: comma-separated product ids to submit with the version")
     args = parser.parse_args()
     app = app_id(args.bundle_id)
@@ -389,6 +446,8 @@ def main():
         attach_build(app, args.build)
     elif args.command == "submit":
         submit(app, [p for p in args.products.split(",") if p])
+    elif args.command == "set-version":
+        set_version(app, args.version or (Path(__file__).resolve().parents[3] / "VERSION").read_text().strip())
     elif args.command == "review-notes":
         if not args.notes:
             parser.error("review-notes needs --notes")

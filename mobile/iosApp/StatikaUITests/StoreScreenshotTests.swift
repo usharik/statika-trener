@@ -35,6 +35,14 @@ final class StoreScreenshotTests: StatikaUITestCase {
         field.typeText(value)
     }
 
+    /// Skryje klávesnici klepnutím na titulek v jazyce snímků (dismissKeyboard() zná jen český).
+    private func hideKeyboard() {
+        guard app.keyboards.firstMatch.exists else { return }
+        el(t("Statika · nosníky", "Статика · балки")).tap()
+        pause(0.8)
+        XCTAssertFalse(app.keyboards.firstMatch.exists, "keyboard still visible after tapping the title")
+    }
+
     /// Bohatší úloha než č. 1: Gerberův nosník (kloub), těžká.
     func test01Problem() {
         extraArguments = ["-statika.level", "3", "-statika.types", "gerber", "-statika.seed", "4"]
@@ -80,6 +88,8 @@ final class StoreScreenshotTests: StatikaUITestCase {
         for (i, v) in ["0", "1,75", "5,25"].enumerated() {
             type(v, into: values.element(boundBy: i))
         }
+        // číselná klávesnice zakrývá „Zkontrolovat“ a Compose hlásí jen viditelné prvky (jako FlowTests)
+        hideKeyboard()
         tap(check)
         tap(next)
         wait(t("Nová úloha", "Новая задача"))
@@ -115,5 +125,27 @@ final class StoreScreenshotTests: StatikaUITestCase {
         XCTAssertTrue(buy.waitForExistence(timeout: 5) && buy.isHittable, "remove-ads button not visible in the settings sheet")
         pause(1.5)
         storeShot("iap-settings")
+    }
+
+    /// Kurz „Základy trigonometrie“ (seznam lekcí) a jedna série procvičování s úlohou.
+    func test05TrigAndPractice() {
+        tap(t("Výklad a procvičování", "Объяснения и задачи"))
+        tap(t("Základy trigonometrie", "Основы тригонометрии"))
+        wait(t("Procvičování", "Практика"))
+        pause(1)
+        storeShot("store-06-trig")
+        tap(t("Procvičování", "Практика"))
+        tap(t("Strany a podíly", "Стороны и отношения"), contains: true)
+        pause(1.5)
+        storeShot("store-07-practice")
+    }
+
+    /// Okno „Úloha jako PDF“ s placeným „Zadání s řešením“ (snímek pro kontrolu nákupu pdf_solution_statika).
+    func test06PdfDialog() {
+        wait(t("Úloha č.", "Задача №"), contains: true)
+        tap(t("Uložit jako PDF", "Сохранить в PDF"))
+        wait(t("Úloha jako PDF", "Задача в PDF"))
+        pause(1)
+        storeShot("iap-pdf")
     }
 }
