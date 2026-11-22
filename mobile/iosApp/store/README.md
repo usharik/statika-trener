@@ -33,8 +33,10 @@ v repozitáři tajemství (`./setup-github-secrets.sh`); hlavní cesta je lokál
 3. `iosApp/upload-testflight.sh <build>` → TestFlight; vyzkoušet reklamu, nákupy v sandboxu, obnovení, PDF, souhlas UMP.
 4. Snímky: `iosApp/store/capture_screenshots.sh` (simulátory iPhone Pro Max a iPad Pro 13", cs + ru) →
    `screenshots/<locale>/`, `iap/settings-remove-ads.png` a `iap/pdf-solution.png`; znovu `iap` (nahraje snímky ke kontrole).
-5. Stránka: `asc.sh bundle exec fastlane ios listing`; štítek App Privacy: `fastlane ios privacy` (Apple ID, 2FA)
-   nebo ručně podle `fastlane/app_privacy_details.json`.
+5. Stránka: `asc.sh /tmp/…/venv/bin/python iosApp/store/tools/asc_listing.py metadata|screenshots|review|availability`,
+   kontrola `verify` (Python s `pyjwt`, `cryptography`; fastlane tu není). Dostupnost: všude kromě Číny (ICP, formuláře
+   App Compliance pro AI a Security Assessment, AdMob tam nefunguje). Štítek App Privacy ručně podle
+   `fastlane/app_privacy_details.json` a **Publish** – uložené, ale nepublikované odpovědi `submit` odmítne.
 6. `attach-build --build <číslo>` → `submit --products remove_ads_statika,pdf_solution_statika`
    (první nákupy v aplikaci jdou ke kontrole spolu s verzí). Vydání ručně; po vydání AdMob → „Add app store listing“.
 

@@ -168,19 +168,24 @@ def review(app: str):
     print(f"review notes set ({len(notes)} characters)")
 
 
+EXCLUDED_TERRITORIES = {"CHN"}
+
+
 def availability(app: str):
     found = call("GET", f"/v1/apps/{app}/appAvailabilityV2", ok_errors=(404,))
     if found and found.get("data"):
         print("availability exists:", found["data"]["attributes"])
         return
+    # China mainland needs an ICP filing and the App Compliance forms (AI content, Security Assessment); AdMob does not
+    # serve there either, so the app is not offered there.
     territories = [t["id"] for t in pages("/v1/territories?limit=200")]
     body = {"data": {"type": "appAvailabilities", "attributes": {"availableInNewTerritories": True},
                      "relationships": {"app": {"data": {"type": "apps", "id": app}},
                                        "territoryAvailabilities": {"data": [{"type": "territoryAvailabilities", "id": f"${{{t}}}"} for t in territories]}}},
-            "included": [{"type": "territoryAvailabilities", "id": f"${{{t}}}", "attributes": {"available": True},
+            "included": [{"type": "territoryAvailabilities", "id": f"${{{t}}}", "attributes": {"available": t not in EXCLUDED_TERRITORIES},
                           "relationships": {"territory": {"data": {"type": "territories", "id": t}}}} for t in territories]}
     call("POST", "/v2/appAvailabilities", body)
-    print(f"availability: {len(territories)} territories and new ones")
+    print(f"availability: {len(territories) - len(EXCLUDED_TERRITORIES)} territories and new ones, not {sorted(EXCLUDED_TERRITORIES)}")
 
 
 def verify(app: str):
