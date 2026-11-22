@@ -1,1 +1,1 @@
-mechanika,podpora,moment,síla,průmyslovka,stavební,maturita,rovnováha,vetknutí,kloub,Gerber,škola
+mechanika,podpora,moment,síla,průmyslovka,goniometrie,maturita,rovnováha,vetknutí,kloub,Gerber,sinus

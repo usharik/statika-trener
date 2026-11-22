@@ -1,13 +1,13 @@
 name: App Store Connect setup
 
 # Nastavení vydání přes App Store Connect API (mobile/iosApp/store/tools/asc_setup.py, převzato z Ear4Music2): cena,
-# věkové hodnocení, nákup v aplikaci s lokalizacemi, cenou, dostupností a snímkem pro kontrolu, poznámky pro App Review.
+# věkové hodnocení, nákupy v aplikaci s lokalizacemi, cenou, dostupností a snímkem pro kontrolu, poznámky pro App Review.
 # `status` jen čte. Jen ručně z karty Actions; nic se neodesílá ke kontrole, kromě příkazu `submit`.
 on:
   workflow_dispatch:
     inputs:
       command:
-        description: "status | price-free | age-rating | iap | review-notes | attach-build | submit | cancel-review"
+        description: "status | price-free | age-rating | iap | review-notes | set-version | attach-build | submit | cancel-review"
         required: true
         default: status
       build:
@@ -15,9 +15,13 @@ on:
         required: false
         default: ""
       products:
-        description: "submit: comma-separated product ids to submit with the version (remove_ads_statika)"
+        description: "submit: comma-separated product ids to submit with the version (remove_ads_statika,pdf_solution_statika)"
         required: false
         default: ""
+      spec:
+        description: "iap: the product file in mobile/iosApp/store/iap (remove_ads_statika.json | pdf_solution_statika.json)"
+        required: false
+        default: "remove_ads_statika.json"
 
 defaults:
   run:
@@ -41,5 +45,5 @@ jobs:
         run: |
           echo "$API_KEY" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
           export ASC_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
-          python3 iosApp/store/tools/asc_setup.py --bundle-id cz.usharik.statika "${{ inputs.command }}" --build "${{ inputs.build }}" --products "${{ inputs.products }}" --notes iosApp/store/review_notes.txt --spec iosApp/store/iap/remove_ads_statika.json
+          python3 iosApp/store/tools/asc_setup.py --bundle-id cz.usharik.statika "${{ inputs.command }}" --build "${{ inputs.build }}" --products "${{ inputs.products }}" --notes iosApp/store/review_notes.txt --spec "iosApp/store/iap/${{ inputs.spec }}"
           rm -f "$RUNNER_TEMP/AuthKey.p8"

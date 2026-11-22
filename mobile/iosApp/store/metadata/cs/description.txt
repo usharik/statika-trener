@@ -15,11 +15,17 @@ Chyba není konec
 Základy statiky
 Krátký interaktivní výklad v 9 lekcích: síla jako šipka, rovnováha sil, složky síly, moment, rovnováha momentů, podpory a vazby, uvolnění, spojité zatížení a kloub. Každá karta má úkol, který si vyzkoušíš přímo na obrázku – je vhodný i pro ty, kdo fyziku nemají v malíčku.
 
+Základy trigonometrie
+Odkud se berou sin, cos a tg, jednotková kružnice, hodnoty pro 30°, 45° a 60°, které si snadno zapamatuješ, a hlavně jak s nimi rozložit sílu na složky. 8 krátkých lekcí a procvičování: 7 sérií s okamžitou kontrolou a rozborem typických chyb.
+
 Úlohy podle tebe
 • Čtyři typy nosníků: prostý, s převislým koncem, vetknutý a Gerberův nosník s kloubem.
 • Tři obtížnosti.
 • Oblíbené úlohy si uložíš hvězdičkou a kdykoli se k nim vrátíš.
 • Každá úloha má číslo – pošli ho spolužákovi nebo otevři úlohu podle čísla od učitele.
 • Čeština a ruština, světlé i tmavé téma, telefon i tablet.
+
+Úloha jako PDF
+Zadání úlohy s výkresem uložíš jako PDF zdarma – k tisku nebo do sešitu. PDF se zadáním a celým řešením (uvolnění, rovnice, výsledky) je placené za každé stažení.
 
 Aplikace je zdarma s reklamou. Reklamu můžeš natrvalo odstranit jednorázovým nákupem.
